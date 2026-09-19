@@ -1,0 +1,75 @@
+import time
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException
+
+import app.config as config
+from ..pipeline import PosturePipeline
+from .schemas import (ConfigResponse, HealthResponse, Measurements,
+                      PostureCurrent, SessionStatsResponse)
+
+router = APIRouter()
+
+
+def _get_pipeline() -> Optional[PosturePipeline]:
+    from ..main import get_pipeline
+    return get_pipeline()
+
+
+@router.get("/health", response_model=HealthResponse)
+def health():
+    from ..main import _start_time
+    pipe = _get_pipeline()
+    camera_ok = pipe.camera.is_opened if pipe else False
+    model_ok = pipe.detector.model_loaded if pipe else False
+    return HealthResponse(
+        status="healthy",
+        camera_available=camera_ok,
+        model_loaded=model_ok,
+        demo_mode=config.DEMO_MODE,
+        uptime_seconds=round(time.time() - _start_time, 1),
+        fps=round(pipe.camera.current_fps, 1) if pipe else 0.0,
+    )
+
+
+@router.get("/api/posture/current", response_model=PostureCurrent)
+def current_posture():
+    pipe = _get_pipeline()
+    if pipe is None:
+        raise HTTPException(status_code=503, detail="Pipeline not initialized")
+    data = pipe.get_current()
+    return PostureCurrent(**data)
+
+
+@router.get("/api/session/stats", response_model=SessionStatsResponse)
+def session_stats():
+    pipe = _get_pipeline()
+    if pipe is None:
+        raise HTTPException(status_code=503, detail="Pipeline not initialized")
+    return SessionStatsResponse(**pipe.get_session_stats())
+
+
+@router.get("/api/config", response_model=ConfigResponse)
+def get_config():
+    return ConfigResponse(
+        head_tilt_warning_degrees=config.HEAD_TILT_WARNING_DEGREES,
+        head_tilt_bad_degrees=config.HEAD_TILT_BAD_DEGREES,
+        shoulder_alignment_warning_degrees=config.SHOULDER_ALIGNMENT_WARNING_DEGREES,
+        shoulder_alignment_bad_degrees=config.SHOULDER_ALIGNMENT_BAD_DEGREES,
+        neck_offset_warning=config.NECK_OFFSET_WARNING,
+        neck_offset_bad=config.NECK_OFFSET_BAD,
+        forward_head_warning=config.FORWARD_HEAD_WARNING,
+        forward_head_bad=config.FORWARD_HEAD_BAD,
+        gaze_warning_degrees=config.GAZE_WARNING_DEGREES,
+        gaze_bad_degrees=config.GAZE_BAD_DEGREES,
+        score_good_threshold=config.SCORE_GOOD_THRESHOLD,
+        score_warning_threshold=config.SCORE_WARNING_THRESHOLD,
+        smoothing_alpha=config.SMOOTHING_ALPHA,
+        warning_frames_before_escalation=config.WARNING_FRAMES_BEFORE_ESCALATION,
+        bad_frames_before_escalation=config.BAD_FRAMES_BEFORE_ESCALATION,
+        camera_index=config.CAMERA_INDEX,
+        frame_width=config.FRAME_WIDTH,
+        frame_height=config.FRAME_HEIGHT,
+        target_fps=config.TARGET_FPS,
+        demo_mode=config.DEMO_MODE,
+    )
