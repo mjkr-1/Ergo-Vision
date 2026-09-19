@@ -28,6 +28,9 @@ ErgoVision uses OpenCV and MediaPipe to estimate ergonomic posture indicators fr
 - Session timing, posture percentages, warning counts and average score
 - Live two-minute posture trend chart
 - Local browser session-history summaries
+- Configurable movement-break and sustained-poor-posture reminders
+- Optional desktop notifications with explicit browser permission
+- Installable macOS `.app` launcher for everyday use
 - Pause, resume and reset controls
 - Demo mode for development without a webcam
 - Automatic MediaPipe model provisioning
@@ -51,6 +54,17 @@ ErgoVision opens at `http://127.0.0.1:8000`.
 On the first camera run, macOS may ask Terminal or Python for camera access. Allow it under **System Settings → Privacy & Security → Camera**.
 
 To stop ErgoVision, use **Ctrl+C**. The launcher also handles **Ctrl+Z** defensively so the webcam is released instead of leaving a suspended process behind.
+
+
+## Install the macOS launcher
+
+After normal setup, create a clickable local app:
+
+```bash
+bash scripts/install_mac_app.sh
+```
+
+It installs `~/Applications/ErgoVision.app`. Open it from Finder or Spotlight. To stop the backend explicitly, run `bash scripts/stop_mac.sh`. See [macOS App Launcher](docs/MAC_APP.md).
 
 ## Repository layout
 
@@ -219,7 +233,7 @@ See [API reference](docs/API.md).
 
 ## Project status and roadmap
 
-The current version is a local desktop-style web application intended for single-user ergonomic feedback. It includes personal calibration, torso/slouch detection, live trend visualization and local session-history summaries. Desktop packaging, reminders, richer confidence modelling and browser-native camera processing are the main next extensions.
+The current version is a local desktop-style web application intended for single-user ergonomic feedback. It includes personal calibration, torso/slouch detection, live trend visualization and local session-history summaries. The current version includes personal calibration, torso/slouch detection, live trends, local session history, smart reminders and an installable macOS launcher. Camera selection, exports, accessibility and richer confidence modelling are the main next extensions.
 
 See [Roadmap](docs/ROADMAP.md).
 

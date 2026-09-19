@@ -9,19 +9,19 @@ This roadmap is directional rather than a commitment to dates.
 - live posture trend visualization
 - local browser session history
 - professional CI and contribution workflow
+- configurable reminders and break prompts
+- installable macOS app launcher
 
 ## Near term
 
-- configurable reminders and break prompts
 - improved landmark quality/confidence reporting
 - camera/device selector
 - exportable session summaries
 - additional frontend tests
-- automated release packaging
+- signed/notarized release packaging
 
 ## Product maturity
 
-- packaged macOS desktop distribution
 - fully persistent local session database with explicit retention controls
 - accessible colour and reduced-motion options
 - configurable ergonomic thresholds and profiles

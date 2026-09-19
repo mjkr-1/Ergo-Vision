@@ -4,6 +4,7 @@ import CameraFeed from './components/CameraFeed'
 import Feedback from './components/Feedback'
 import Metrics from './components/Metrics'
 import PostureScore from './components/PostureScore'
+import ReminderPanel from './components/ReminderPanel'
 import SessionHistory from './components/SessionHistory'
 import SessionPanel from './components/SessionPanel'
 import TrendChart from './components/TrendChart'
@@ -86,6 +87,7 @@ export default function App() {
           <CalibrationPanel />
           <Metrics posture={posture} config={config} />
           <SessionPanel />
+          <ReminderPanel posture={posture} />
           <SessionHistory />
           <div className="card privacy-card">
             <div className="card-title">Privacy</div>

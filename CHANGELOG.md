@@ -8,6 +8,11 @@ The project follows the spirit of Keep a Changelog and uses semantic versioning 
 
 ### Added
 
+- configurable movement-break reminders
+- sustained poor-posture notifications with cooldowns
+- optional browser/macOS desktop notifications
+- installable local macOS `.app` launcher
+- explicit Mac stop/uninstall scripts
 - personal neutral-posture calibration persisted locally on the Mac
 - hip landmarks and relative pose depth for upper-body analysis
 - torso-lean measurement

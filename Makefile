@@ -20,3 +20,9 @@ check:
 
 demo:
 	. .venv/bin/activate && cd backend && DEMO_MODE=1 python -m uvicorn app.main:app --reload --port 8000
+
+mac-app:
+	bash scripts/install_mac_app.sh
+
+stop:
+	bash scripts/stop_mac.sh

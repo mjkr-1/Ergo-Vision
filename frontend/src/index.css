@@ -479,3 +479,89 @@ button {
     flex-direction: column;
   }
 }
+
+
+/* ErgoVision v3 reminder controls */
+.reminder-copy,
+.reminder-last-alert {
+  color: #bac6d8;
+  line-height: 1.5;
+  font-size: 0.82rem;
+}
+
+.setting-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.setting-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.setting-grid select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.6rem;
+  background: #101a2d;
+  color: var(--text);
+  font: inherit;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+  color: #bac6d8;
+  font-size: 0.82rem;
+}
+
+.reminder-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid rgba(45, 61, 91, 0.8);
+  border-radius: 9px;
+  background: rgba(6, 11, 20, 0.35);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.reminder-status strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.reminder-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+.reminder-permission {
+  margin-top: 0.75rem;
+}
+
+.reminder-last-alert {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(45, 61, 91, 0.65);
+}
+
+@media (max-width: 520px) {
+  .setting-grid,
+  .reminder-actions {
+    grid-template-columns: 1fr;
+  }
+}
