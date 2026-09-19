@@ -44,16 +44,26 @@ class Camera:
             return False
 
     def read(self) -> tuple[bool, np.ndarray | None]:
-        if DEMO_MODE:
-            return True, self._generate_demo_frame()
-        if not self.is_opened or self.cap is None:
+        if not self.is_opened:
             return False, None
+
         now = time.time()
         if now - self.last_frame_time < self.frame_interval:
             return False, None
+
+        if DEMO_MODE:
+            frame = self._generate_demo_frame()
+            self.last_frame_time = now
+            self._update_fps()
+            return True, frame
+
+        if self.cap is None:
+            return False, None
+
         ret, frame = self.cap.read()
         if not ret or frame is None:
             return False, None
+
         self.last_frame_time = now
         self._update_fps()
         return True, frame
@@ -61,9 +71,15 @@ class Camera:
     def _generate_demo_frame(self) -> np.ndarray:
         frame = np.zeros((self.frame_height, self.frame_width, 3), dtype=np.uint8)
         frame[:] = (40, 40, 40)
-        cv2.putText(frame, "DEMO MODE", (self.frame_width // 2 - 100, self.frame_height // 2),
-                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, (200, 200, 200), 2)
-        self._update_fps()
+        cv2.putText(
+            frame,
+            "DEMO MODE",
+            (self.frame_width // 2 - 100, self.frame_height // 2),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.0,
+            (200, 200, 200),
+            2,
+        )
         return frame
 
     def _update_fps(self):

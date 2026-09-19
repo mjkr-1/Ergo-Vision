@@ -12,6 +12,7 @@ export default function App() {
   const { posture, connected } = usePostureSocket()
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [health, setHealth] = useState<HealthStatus | null>(null)
+  const [backendReachable, setBackendReachable] = useState(true)
 
   useEffect(() => {
     let disposed = false
@@ -21,9 +22,10 @@ export default function App() {
         if (!disposed) {
           setConfig(cfg)
           setHealth(h)
+          setBackendReachable(true)
         }
       } catch {
-        // backend not ready
+        if (!disposed) setBackendReachable(false)
       }
     }
     load()
@@ -34,12 +36,17 @@ export default function App() {
     }
   }, [])
 
+  const setupProblem =
+    health &&
+    !health.demo_mode &&
+    (!health.camera_available || !health.model_loaded)
+
   return (
     <div className="app">
       <header className="header">
         <div>
           <h1 className="title">ErgoVision</h1>
-          <p className="subtitle">Your real-time ergonomics assistant</p>
+          <p className="subtitle">Private, local posture monitoring while you work</p>
         </div>
         <div className="header-badges">
           {health?.demo_mode && <span className="badge demo">DEMO</span>}
@@ -51,6 +58,20 @@ export default function App() {
         </div>
       </header>
 
+      {!backendReachable && (
+        <div className="system-banner error">
+          The ErgoVision backend is not reachable. Start the local server and refresh this page.
+        </div>
+      )}
+
+      {setupProblem && (
+        <div className="system-banner warning">
+          {!health.camera_available && <span>Camera unavailable. </span>}
+          {!health.model_loaded && <span>MediaPipe models unavailable. </span>}
+          Check Terminal camera permission and run the Mac setup script again.
+        </div>
+      )}
+
       <main className="grid">
         <section className="grid-main">
           <PostureScore posture={posture} connected={connected} />
@@ -60,12 +81,16 @@ export default function App() {
         <aside className="grid-side">
           <Metrics posture={posture} config={config} />
           <SessionPanel />
+          <div className="card privacy-card">
+            <div className="card-title">Privacy</div>
+            <p>Video processing stays on this computer. Camera frames are not stored or uploaded.</p>
+          </div>
         </aside>
       </main>
 
       <footer className="footer">
         <span>ErgoVision · privacy-first posture monitoring</span>
-        <span className="muted">Not a medical device.</span>
+        <span className="muted">Ergonomic guidance only · not a medical device</span>
       </footer>
     </div>
   )

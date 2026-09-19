@@ -1,45 +1,47 @@
 import logging
 import math
-import os
+import threading
 import time
-from pathlib import Path
 
 import cv2
 import mediapipe as mp
 import numpy as np
 
-from ..config import (DEMO_MODE, FRAME_WIDTH, FRAME_HEIGHT, TARGET_FPS,
-                      WEBSOCKET_UPDATE_INTERVAL)
+from ..config import AUTO_DOWNLOAD_MODELS, DEMO_MODE, FRAME_HEIGHT
 from .camera import Camera
-from .landmarks import (Landmark2D, LandmarkSet, landmarks_from_face_results,
-                        landmarks_from_pose_results, merge_landmarks)
+from .landmarks import (
+    Landmark2D,
+    LandmarkSet,
+    landmarks_from_face_results,
+    landmarks_from_pose_results,
+    merge_landmarks,
+)
+from .models import MODELS_DIR, ensure_models
 
 logger = logging.getLogger(__name__)
 
 mp_image = mp.Image
 
-MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 FACE_MODEL_PATH = str(MODELS_DIR / "face_landmarker.task")
 POSE_MODEL_PATH = str(MODELS_DIR / "pose_landmarker_lite.task")
 
 
 class Detector:
-    """Orchestrates camera capture + MediaPipe landmark detection."""
-
     def __init__(self, camera: Camera):
         self.camera = camera
         self.face_landmarker = None
         self.pose_landmarker = None
         self.model_loaded = False
         self.last_landmarks: LandmarkSet | None = None
-        self.last_frame = None
-        self._frame_lock = False
+        self._last_face: LandmarkSet | None = None
+        self._last_pose: LandmarkSet | None = None
+        self._landmark_lock = threading.Lock()
         self._demo_provider = DemoLandmarkProvider()
 
     def load_models(self) -> bool:
-        if not (Path(FACE_MODEL_PATH).exists() and Path(POSE_MODEL_PATH).exists()):
-            logger.error("Model files missing in %s", MODELS_DIR)
+        if not ensure_models(auto_download=AUTO_DOWNLOAD_MODELS):
             return False
+
         try:
             base_options = mp.tasks.BaseOptions
             vision = mp.tasks.vision
@@ -77,28 +79,21 @@ class Detector:
 
     def _face_callback(self, result, image, timestamp_ms):
         face = landmarks_from_face_results(result.face_landmarks)
-        pose = self.last_landmarks
-        if face or pose:
-            self.last_landmarks = merge_landmarks(face, pose)
+        with self._landmark_lock:
+            self._last_face = face
+            merged = merge_landmarks(self._last_face, self._last_pose)
+            self.last_landmarks = merged if merged.landmarks else None
 
     def _pose_callback(self, result, image, timestamp_ms):
         pose = landmarks_from_pose_results(result.pose_landmarks)
-        face = None
-        if self.last_landmarks and self.last_landmarks.has("nose_tip"):
-            face = LandmarkSet(landmarks={
-                k: v for k, v in self.last_landmarks.landmarks.items()
-                if k in ("nose_tip", "nose_bridge", "left_eye_outer", "right_eye_outer",
-                         "left_eye_inner", "right_eye_inner", "chin", "forehead",
-                         "left_ear", "right_ear", "mouth_left", "mouth_right",
-                         "left_eye_center", "right_eye_center", "left_iris", "right_iris")
-            })
-        merged = merge_landmarks(face, pose)
-        self.last_landmarks = merged if merged.landmarks else None
+        with self._landmark_lock:
+            self._last_pose = pose
+            merged = merge_landmarks(self._last_face, self._last_pose)
+            self.last_landmarks = merged if merged.landmarks else None
 
     def process_frame(self, frame: np.ndarray) -> tuple[LandmarkSet | None, np.ndarray]:
-        """Process a single frame, return (landmarks, annotated_frame)."""
         annotated = frame.copy()
-        timestamp = int(time.time() * 1000)
+        timestamp = time.monotonic_ns() // 1_000_000
 
         if self.model_loaded and not DEMO_MODE:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -109,12 +104,21 @@ class Detector:
             except Exception as e:
                 logger.debug("Detection error: %s", e)
         elif DEMO_MODE:
-            self.last_landmarks = self._demo_provider.get_landmarks()
+            with self._landmark_lock:
+                self.last_landmarks = self._demo_provider.get_landmarks()
+            cv2.putText(
+                annotated,
+                "DEMO MODE",
+                (10, FRAME_HEIGHT - 20),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (100, 100, 100),
+                2,
+            )
 
-            cv2.putText(annotated, "DEMO MODE", (10, FRAME_HEIGHT - 20),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (100, 100, 100), 2)
+        with self._landmark_lock:
+            landmarks = self.last_landmarks
 
-        landmarks = self.last_landmarks
         if landmarks is not None:
             annotated = self._draw_landmarks(annotated, landmarks)
 
@@ -122,7 +126,7 @@ class Detector:
 
     def _draw_landmarks(self, frame: np.ndarray, landmarks: LandmarkSet) -> np.ndarray:
         h, w = frame.shape[:2]
-        for name, lm in landmarks.landmarks.items():
+        for lm in landmarks.landmarks.values():
             x, y = int(lm.x * w), int(lm.y * h)
             cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
 
@@ -139,9 +143,15 @@ class Detector:
             b = (int(chin[0] * w), int(chin[1] * h))
             cv2.line(frame, a, b, (0, 255, 255), 2)
 
-        fps = self.camera.current_fps if hasattr(self.camera, 'current_fps') else 0
-        cv2.putText(frame, f"FPS: {fps:.1f}", (10, 25),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        cv2.putText(
+            frame,
+            f"FPS: {self.camera.current_fps:.1f}",
+            (10, 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 0),
+            2,
+        )
         return frame
 
     def release(self):
@@ -153,8 +163,6 @@ class Detector:
 
 
 class DemoLandmarkProvider:
-    """Produces deterministic simulated landmarks for demo mode."""
-
     def __init__(self):
         self.time_offset = time.time()
 
@@ -172,7 +180,6 @@ class DemoLandmarkProvider:
         hw = 0.05
         left_eye = (0.5 - hw * math.cos(theta), 0.40 - hw * math.sin(theta))
         right_eye = (0.5 + hw * math.cos(theta), 0.40 + hw * math.sin(theta))
-
         nose_offset = 0.5 * 0.1 * math.tan(theta)
 
         face = {
@@ -204,5 +211,3 @@ class DemoLandmarkProvider:
         merged.update(face)
         merged.update(pose)
         return LandmarkSet(landmarks=merged)
-
-

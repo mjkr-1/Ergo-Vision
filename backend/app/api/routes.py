@@ -5,8 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 import app.config as config
 from ..pipeline import PosturePipeline
-from .schemas import (ConfigResponse, HealthResponse, Measurements,
-                      PostureCurrent, SessionStatsResponse)
+from .schemas import ConfigResponse, HealthResponse, PostureCurrent, SessionStatsResponse
 
 router = APIRouter()
 
@@ -14,6 +13,13 @@ router = APIRouter()
 def _get_pipeline() -> Optional[PosturePipeline]:
     from ..main import get_pipeline
     return get_pipeline()
+
+
+def _require_pipeline() -> PosturePipeline:
+    pipe = _get_pipeline()
+    if pipe is None:
+        raise HTTPException(status_code=503, detail="Pipeline not initialized")
+    return pipe
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -34,18 +40,33 @@ def health():
 
 @router.get("/api/posture/current", response_model=PostureCurrent)
 def current_posture():
-    pipe = _get_pipeline()
-    if pipe is None:
-        raise HTTPException(status_code=503, detail="Pipeline not initialized")
-    data = pipe.get_current()
-    return PostureCurrent(**data)
+    return PostureCurrent(**_require_pipeline().get_current())
 
 
 @router.get("/api/session/stats", response_model=SessionStatsResponse)
 def session_stats():
-    pipe = _get_pipeline()
-    if pipe is None:
-        raise HTTPException(status_code=503, detail="Pipeline not initialized")
+    return SessionStatsResponse(**_require_pipeline().get_session_stats())
+
+
+@router.post("/api/session/start", response_model=SessionStatsResponse)
+def session_start():
+    pipe = _require_pipeline()
+    pipe.tracker.start()
+    return SessionStatsResponse(**pipe.get_session_stats())
+
+
+@router.post("/api/session/stop", response_model=SessionStatsResponse)
+def session_stop():
+    pipe = _require_pipeline()
+    pipe.tracker.stop()
+    return SessionStatsResponse(**pipe.get_session_stats())
+
+
+@router.post("/api/session/reset", response_model=SessionStatsResponse)
+def session_reset():
+    pipe = _require_pipeline()
+    pipe.tracker.reset()
+    pipe.tracker.start()
     return SessionStatsResponse(**pipe.get_session_stats())
 
 

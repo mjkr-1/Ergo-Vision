@@ -1,13 +1,16 @@
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import cv2
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from .api import routes
-from .config import DEMO_MODE, FRAME_WIDTH, FRAME_HEIGHT
+from .config import CORS_ORIGINS, DEMO_MODE, FRAME_HEIGHT, FRAME_WIDTH, STREAM_FPS
 from .logger import setup_logging
 from .pipeline import PosturePipeline
 from .vision.camera import Camera
@@ -18,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 _active_pipeline = None
 _start_time = time.time()
+_FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 
 def get_pipeline():
@@ -32,34 +36,33 @@ async def lifespan(app: FastAPI):
     pipeline = PosturePipeline(camera, detector)
     _active_pipeline = pipeline
 
-    if not DEMO_MODE:
-        models_loaded = detector.load_models()
-        if not models_loaded:
-            logger.warning("Failed to load MediaPipe models.")
-        camera_opened = camera.open()
-        if not camera_opened:
-            logger.warning("Camera unavailable. Running without live video input.")
-        if not camera_opened or not models_loaded:
-            logger.warning("Vision pipeline partially initialized.")
-    else:
-        logger.info("Demo mode active. Camera and models not used.")
+    camera_opened = camera.open()
+    models_loaded = True if DEMO_MODE else detector.load_models()
+
+    if not camera_opened:
+        logger.warning("Camera unavailable. Running without live video input.")
+    if not models_loaded:
+        logger.warning("MediaPipe models are unavailable.")
+    if not camera_opened or not models_loaded:
+        logger.warning("Vision pipeline partially initialized.")
 
     pipeline.start()
     logger.info("ErgoVision started")
     yield
+
     if _active_pipeline:
         _active_pipeline.stop()
         _active_pipeline.detector.release()
         _active_pipeline = None
 
 
-app = FastAPI(title="ErgoVision", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="ErgoVision", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=".*",
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -73,64 +76,89 @@ async def ws_posture(websocket: WebSocket):
 
 
 def stream_generator():
-    global _active_pipeline
-    pipeline = _active_pipeline
-    if pipeline is None:
-        while True:
-            yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + _blank_frame("Backend not ready") + b"\r\n"
-            time.sleep(0.1)
-
+    delay = 1.0 / max(1, STREAM_FPS)
     while True:
-        annotated = None
-        camera = pipeline.camera
-        if DEMO_MODE:
-            ok, frame = camera.read()
-            if ok and frame is not None:
-                _, annotated = pipeline.detector.process_frame(frame)
-        elif camera.is_opened:
-            ok, frame = camera.read()
-            if ok and frame is not None:
-                _, annotated = pipeline.detector.process_frame(frame)
-
-        if annotated is None:
-            yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + _blank_frame("No camera signal") + b"\r\n"
-            time.sleep(0.1)
-            continue
-
-        ret, jpeg = cv2.imencode(".jpg", annotated)
-        if not ret:
-            yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + b"\r\n"
-            time.sleep(0.1)
-            continue
-        yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n"
-        time.sleep(0.03)
+        pipeline = _active_pipeline
+        jpeg = pipeline.get_frame_jpeg() if pipeline is not None else None
+        if jpeg is None:
+            label = "Backend not ready" if pipeline is None else "No camera signal"
+            jpeg = _blank_frame(label)
+        yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
+        time.sleep(delay)
 
 
 def _blank_frame(text: str) -> bytes:
     import numpy as np
     frame = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8)
-    cv2.putText(frame, text, (50, FRAME_HEIGHT // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (180, 180, 180), 2)
+    cv2.putText(
+        frame,
+        text,
+        (50, FRAME_HEIGHT // 2),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8,
+        (180, 180, 180),
+        2,
+    )
     ret, jpeg = cv2.imencode(".jpg", frame)
-    return jpeg.tobytes()
+    return jpeg.tobytes() if ret else b""
 
 
 @app.get("/api/stream")
 def video_stream():
-    from fastapi.responses import StreamingResponse
-    return StreamingResponse(stream_generator(), media_type="multipart/x-mixed-replace; boundary=frame")
+    return StreamingResponse(
+        stream_generator(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
 
 
 @app.get("/api/stream/frame")
 def video_frame():
-    from fastapi.responses import Response
     pipeline = _active_pipeline
     if pipeline is None:
-        return Response(status_code=503)
-    ok, frame = pipeline.camera.read()
-    if not ok or frame is None:
-        return Response(content=_blank_frame("No camera signal"), media_type="image/jpeg")
-    _, annotated = pipeline.detector.process_frame(frame)
-    ret, jpeg = cv2.imencode(".jpg", annotated)
-    if not ret:
-        return Response(status_code=500)
-    return Response(content=jpeg.tobytes(), media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+        return Response(content=_blank_frame("Backend not ready"), media_type="image/jpeg")
+
+    jpeg = pipeline.get_frame_jpeg()
+    if jpeg is None:
+        jpeg = _blank_frame("No camera signal")
+
+    return Response(
+        content=jpeg,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+if (_FRONTEND_DIST / "assets").is_dir():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=_FRONTEND_DIST / "assets"),
+        name="frontend-assets",
+    )
+
+
+@app.get("/", include_in_schema=False)
+def frontend_index():
+    index = _FRONTEND_DIST / "index.html"
+    if index.is_file():
+        return FileResponse(index)
+    return {
+        "name": "ErgoVision",
+        "status": "backend ready",
+        "ui": "Run npm run dev in frontend, or build the frontend for single-server mode.",
+    }
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def frontend_fallback(full_path: str):
+    if full_path.startswith(("api/", "health", "ws/")):
+        raise HTTPException(status_code=404)
+
+    candidate = (_FRONTEND_DIST / full_path).resolve()
+    if _FRONTEND_DIST in candidate.parents and candidate.is_file():
+        return FileResponse(candidate)
+
+    index = _FRONTEND_DIST / "index.html"
+    if index.is_file():
+        return FileResponse(index)
+
+    raise HTTPException(status_code=404)

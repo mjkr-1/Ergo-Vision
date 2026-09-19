@@ -2,27 +2,21 @@
 
 ## Project Overview
 
-ErgoVision is a privacy-focused, webcam-based screen ergonomics and posture monitoring application. It uses OpenCV + MediaPipe (Tasks API v1.0.1) for landmark detection, geometric analysis for ergonomic measurements, and a FastAPI + React stack for real-time feedback.
+ErgoVision is a privacy-focused, webcam-based screen ergonomics and posture monitoring application. It uses OpenCV + MediaPipe Tasks API for landmark detection, geometric analysis for ergonomic measurements, and a FastAPI + React stack for real-time feedback.
 
 ## Environment
 
-- **Python**: 3.13.14
-- **MediaPipe**: 1.0.1 (Tasks API, NOT the legacy `mp.solutions` API)
-- **OpenCV**: 5.0.0.93 (via opencv-contrib-python)
-- **Node.js**: 24.19.0 / npm 11.17.0
-- **OS**: Windows 10/11
+- Python 3.11+
+- MediaPipe 1.0.1 Tasks API
+- OpenCV 5.0.0.93 via opencv-contrib-python
+- Node.js 18+
+- Supported local targets: macOS and Windows
 
-## Key MediaPipe Facts
+## MediaPipe
 
-MediaPipe 1.0.1 uses the **Tasks API**. The old `mp.solutions` module does NOT exist.
+Do not use the legacy `mp.solutions` API.
 
-```python
-import mediapipe as mp
-# Correct: mp.tasks.vision.FaceLandmarker, PoseLandmarker, HolisticLandmarker
-# Wrong:   mp.solutions.face_mesh, mp.solutions.pose (DOES NOT EXIST)
-```
-
-We use `HolisticLandmarker` for combined face + pose detection in a single pass.
+ErgoVision currently runs `FaceLandmarker` and `PoseLandmarker` in live-stream mode and merges their landmarks. Model bundles live under `backend/app/models/`, are ignored by Git, and are provisioned by `app.vision.models`.
 
 ## Running Tests
 
@@ -38,12 +32,19 @@ cd backend
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-## Running Frontend
+## Running Frontend During Development
 
 ```bash
 cd frontend
 npm install
 npm run dev
+```
+
+## Mac Setup
+
+```bash
+bash scripts/setup_mac.sh
+bash scripts/run_mac.sh
 ```
 
 ## Code Style
@@ -52,4 +53,5 @@ npm run dev
 - No unnecessary abstractions
 - Keep math testable and separate from API routes
 - Use Pydantic models for API responses
-- Handle missing landmarks gracefully (never crash)
+- Handle missing landmarks gracefully
+- Keep camera capture single-owner; consumers should use cached frames from the pipeline

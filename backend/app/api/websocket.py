@@ -1,10 +1,9 @@
 import asyncio
-import json
 import logging
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from ..pipeline import PosturePipeline
+from ..config import WEBSOCKET_UPDATE_INTERVAL
 
 logger = logging.getLogger(__name__)
 
@@ -16,16 +15,14 @@ async def websocket_endpoint(websocket: WebSocket):
     active_connections.add(websocket)
     try:
         from ..main import get_pipeline
-        pipeline = get_pipeline()
         while True:
+            pipeline = get_pipeline()
             if pipeline is not None:
-                event = pipeline.get_current()
-                await websocket.send_text(json.dumps(event))
-            await asyncio.sleep(0.5)
+                await websocket.send_json(pipeline.get_current())
+            await asyncio.sleep(WEBSOCKET_UPDATE_INTERVAL)
     except WebSocketDisconnect:
-        active_connections.discard(websocket)
+        pass
     except Exception:
-        active_connections.discard(websocket)
         logger.exception("WebSocket error")
     finally:
         active_connections.discard(websocket)
@@ -34,9 +31,8 @@ async def websocket_endpoint(websocket: WebSocket):
 async def broadcast(event: dict):
     if not active_connections:
         return
-    message = json.dumps(event)
     for ws in list(active_connections):
         try:
-            await ws.send_text(message)
+            await ws.send_json(event)
         except Exception:
             active_connections.discard(ws)

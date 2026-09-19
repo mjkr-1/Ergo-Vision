@@ -1,11 +1,22 @@
 import os
 
 DEMO_MODE = os.environ.get("DEMO_MODE", "0") == "1"
+AUTO_DOWNLOAD_MODELS = os.environ.get("AUTO_DOWNLOAD_MODELS", "1") == "1"
 
 CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", "0"))
 FRAME_WIDTH = int(os.environ.get("FRAME_WIDTH", "640"))
 FRAME_HEIGHT = int(os.environ.get("FRAME_HEIGHT", "480"))
 TARGET_FPS = int(os.environ.get("TARGET_FPS", "30"))
+STREAM_FPS = int(os.environ.get("STREAM_FPS", "15"))
+
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "CORS_ORIGINS",
+        "http://127.0.0.1:5173,http://localhost:5173",
+    ).split(",")
+    if origin.strip()
+]
 
 HEAD_TILT_WARNING_DEGREES = 8.0
 HEAD_TILT_BAD_DEGREES = 15.0

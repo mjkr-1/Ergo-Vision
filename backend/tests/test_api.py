@@ -10,7 +10,6 @@ os.environ["DEMO_MODE"] = "1"
 
 from fastapi.testclient import TestClient
 
-from app.ergonomics.measurements import ErgonomicMeasurements
 from app.main import app
 
 
@@ -45,6 +44,20 @@ def test_session_stats(client):
     assert "session_duration_seconds" in data
     assert "good_percentage" in data
     assert "average_score" in data
+
+
+def test_session_controls(client):
+    stopped = client.post("/api/session/stop")
+    assert stopped.status_code == 200
+    assert stopped.json()["active"] is False
+
+    started = client.post("/api/session/start")
+    assert started.status_code == 200
+    assert started.json()["active"] is True
+
+    reset = client.post("/api/session/reset")
+    assert reset.status_code == 200
+    assert reset.json()["active"] is True
 
 
 def test_config(client):

@@ -1,13 +1,12 @@
-import json
 import logging
 import threading
 import time
 from datetime import datetime, timezone
 from typing import Optional
 
-import numpy as np
+import cv2
 
-from .config import WEBSOCKET_UPDATE_INTERVAL, SCORE_GOOD_THRESHOLD, SCORE_WARNING_THRESHOLD
+from .config import WEBSOCKET_UPDATE_INTERVAL
 from .ergonomics.classifier import PostureClassifier
 from .ergonomics.feedback import FeedbackEngine
 from .ergonomics.measurements import ErgonomicMeasurements, compute_measurements
@@ -21,8 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 class PosturePipeline:
-    """Runs the full CV pipeline in a background thread."""
-
     def __init__(self, camera: Camera, detector: Detector):
         self.camera = camera
         self.detector = detector
@@ -37,7 +34,8 @@ class PosturePipeline:
         self._current_measurements = ErgonomicMeasurements(person_detected=False)
         self._current_status = "NO_PERSON"
         self._current_score = 0
-        self._last_event = None
+        self._current_frame_jpeg: bytes | None = None
+        self._last_event: dict | None = None
 
     def start(self):
         if self._running:
@@ -60,31 +58,34 @@ class PosturePipeline:
         while self._running:
             ok, frame = self.camera.read()
             if not ok or frame is None:
-                time.sleep(0.01)
+                time.sleep(0.005)
                 continue
 
-            landmarks, _annotated = self.detector.process_frame(frame)
+            landmarks, annotated = self.detector.process_frame(frame)
             measurements = compute_measurements(landmarks)
             smoothed = self.smoother.smooth(measurements)
             status = self.classifier.classify(smoothed)
             score, _breakdown = compute_score(smoothed)
+            encoded, jpeg = cv2.imencode(".jpg", annotated)
 
             with self._lock:
                 self._current_measurements = smoothed
                 self._current_status = status
                 self._current_score = score
-                self.tracker.update(status, score)
+                if encoded:
+                    self._current_frame_jpeg = jpeg.tobytes()
 
+            self.tracker.update(status, score)
             self._maybe_emit(status, smoothed, score)
-
-            time.sleep(0.01)
 
     def _maybe_emit(self, status, measurements, score):
         now = time.time()
         if now - self._last_update_time < WEBSOCKET_UPDATE_INTERVAL:
             return
         self._last_update_time = now
-        self._last_event = self._build_event(status, measurements, score)
+        event = self._build_event(status, measurements, score)
+        with self._lock:
+            self._last_event = event
 
     def _build_event(self, status, measurements, score) -> dict:
         feedback = self.feedback_engine.generate(measurements, status)
@@ -112,8 +113,12 @@ class PosturePipeline:
         return self._build_event(status, measurements, score)
 
     def get_last_event(self) -> Optional[dict]:
-        return self._last_event
+        with self._lock:
+            return self._last_event
+
+    def get_frame_jpeg(self) -> bytes | None:
+        with self._lock:
+            return self._current_frame_jpeg
 
     def get_session_stats(self) -> dict:
-        stats = self.tracker.get_stats()
-        return stats.__dict__
+        return self.tracker.get_stats().__dict__
