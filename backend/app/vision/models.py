@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import logging
+import ssl
 from pathlib import Path
 from urllib.request import Request, urlopen
+
+import certifi
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +43,12 @@ def _is_valid_model(path: Path) -> bool:
 def _download_model(name: str, url: str) -> bool:
     target = MODELS_DIR / name
     temp = target.with_suffix(target.suffix + ".download")
+    context = ssl.create_default_context(cafile=certifi.where())
+
     try:
         logger.info("Downloading MediaPipe model %s", name)
         request = Request(url, headers={"User-Agent": "ErgoVision/1.0"})
-        with urlopen(request, timeout=60) as response, temp.open("wb") as output:
+        with urlopen(request, timeout=60, context=context) as response, temp.open("wb") as output:
             while True:
                 chunk = response.read(1024 * 1024)
                 if not chunk:

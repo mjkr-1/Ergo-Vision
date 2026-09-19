@@ -1,91 +1,80 @@
-# ErgoVision Architecture
+# Architecture
 
 ## Overview
 
-ErgoVision is a layered, privacy-focused application that processes webcam video locally to provide real-time ergonomic posture feedback.
+ErgoVision is a local-first application. A Python process owns the webcam, performs computer-vision inference, computes ergonomic indicators and exposes live state to a React dashboard through FastAPI.
 
-## Layers
-
-```
-┌─────────────────────────────────────────┐
-│            React Dashboard              │
-│  (Vite + TypeScript)                    │
-│  - Posture score display                │
-│  - Live camera feed (MJPEG)             │
-│  - Ergonomic metrics                    │
-│  - Feedback messages                    │
-│  - Session statistics                   │
-└────────────┬────────────────────────────┘
-             │ HTTP / WebSocket
-┌────────────┴────────────────────────────┐
-│           FastAPI Backend               │
-│  - REST endpoints (health, config,      │
-│    posture, session stats)              │
-│  - WebSocket (real-time posture data)   │
-│  - MJPEG camera stream                 │
-└────────────┬────────────────────────────┘
-             │
-┌────────────┴────────────────────────────┐
-│         Posture Analysis Pipeline       │
-│  1. Camera capture (OpenCV)             │
-│  2. Landmark detection (MediaPipe)      │
-│  3. Landmark abstraction                │
-│  4. Geometric measurements              │
-│  5. Temporal smoothing                  │
-│  6. Posture classification              │
-│  7. Posture scoring                     │
-│  8. Feedback generation                 │
-│  9. Session tracking                    │
-└─────────────────────────────────────────┘
+```text
+React dashboard
+  ↓ REST / WebSocket / MJPEG
+FastAPI application
+  ↓ cached pipeline state
+PosturePipeline
+  ↓
+OpenCV + MediaPipe Tasks
 ```
 
-## Camera Display Decision
+## Core design decisions
 
-**Chosen approach: Option A (Python-side capture + MJPEG streaming)**
+### Single camera owner
 
-The Python backend captures the webcam, runs MediaPipe, draws landmarks on the
-annotated frame, and streams processed frames via an MJPEG endpoint. The React
-frontend displays this stream via an `<img>` tag pointing at the stream URL.
+`PosturePipeline` is the only continuous webcam consumer. It processes each captured frame and caches the most recent annotated JPEG. The MJPEG route reads this cache instead of calling the camera independently.
 
-Rationale:
-- All CV processing stays in Python (no need to ship models to browser)
-- MJPEG is natively supported by browsers via `<img>` tag
-- Simple to implement and debug
-- Acceptable latency for a prototype (~100-200ms)
-- Privacy: processed frames never leave the local machine
+This avoids frame starvation, inconsistent FPS and multiple OpenCV consumers competing for the same device.
 
-The alternative (browser captures webcam, sends frames to backend) was rejected
-because it adds complexity without benefit for a local-only application.
+### Separate ergonomic math
 
-## Privacy Design
+Geometry, measurements, smoothing, classification and scoring are independent of FastAPI. That keeps the calculations unit-testable and allows the transport layer to evolve without rewriting the ergonomic model.
 
-- All processing happens locally on the user's machine
-- No webcam data is uploaded to any server
-- No raw webcam footage is stored to disk
-- No external CV APIs are used
-- No database is used in the prototype
-- Session data is held in memory only
+### Local-first data flow
 
-## Module Responsibilities
+The current deployment model intentionally runs both the camera pipeline and API on the user's computer. Raw frames are not sent to a remote inference service and are not persisted by ErgoVision.
+
+### In-memory session state
+
+Session timing and posture aggregates are kept in memory. Closing the backend clears the session. Persistent history is intentionally outside the current scope.
+
+## Backend modules
 
 | Module | Responsibility |
-|--------|---------------|
-| `vision/camera.py` | OpenCV webcam capture, frame management |
-| `vision/landmarks.py` | Landmark abstraction layer (wraps MediaPipe) |
-| `vision/detector.py` | Orchestrates camera + landmark detection |
-| `ergonomics/geometry.py` | Pure math functions (angle, distance, midpoint) |
-| `ergonomics/measurements.py` | Ergonomic measurements from landmarks |
-| `ergonomics/scoring.py` | 0-100 posture score from measurements |
-| `ergonomics/classifier.py` | GOOD/WARNING/BAD classification |
-| `session/tracker.py` | In-memory session statistics |
-| `api/routes.py` | FastAPI REST endpoints |
-| `api/websocket.py` | WebSocket for real-time updates |
-| `config.py` | All thresholds and configuration |
+|---|---|
+| `app/main.py` | application lifecycle, MJPEG stream and built frontend serving |
+| `app/config.py` | environment and ergonomic thresholds |
+| `app/pipeline.py` | single-owner real-time processing pipeline |
+| `app/vision/camera.py` | OpenCV capture and FPS management |
+| `app/vision/detector.py` | MediaPipe face/pose inference and overlays |
+| `app/vision/landmarks.py` | semantic landmark abstraction |
+| `app/vision/models.py` | MediaPipe model provisioning |
+| `app/ergonomics/geometry.py` | pure geometry helpers |
+| `app/ergonomics/measurements.py` | ergonomic indicators from landmarks |
+| `app/ergonomics/smoothing.py` | temporal smoothing |
+| `app/ergonomics/classifier.py` | GOOD/WARNING/BAD temporal classification |
+| `app/ergonomics/scoring.py` | weighted 0–100 score |
+| `app/ergonomics/feedback.py` | human-readable posture feedback |
+| `app/session/tracker.py` | thread-safe session statistics |
+| `app/api/routes.py` | REST endpoints |
+| `app/api/websocket.py` | live posture WebSocket |
+| `app/api/schemas.py` | Pydantic API contracts |
 
-## Limitations
+## Frontend
 
-- A 2D webcam cannot measure true 3D posture or spinal curvature
-- Distance estimates are approximations, not calibrated measurements
-- The system provides ergonomic indicators, not medical diagnosis
-- Model accuracy depends on lighting and camera angle
-- Single-person use only
+The frontend uses React, TypeScript and Vite. Development traffic is proxied to the local FastAPI server. For normal local use, `npm run build` produces `frontend/dist`, which FastAPI serves directly so only one local process is required.
+
+## MediaPipe models
+
+The official `.task` model bundles are not committed to Git. `app.vision.models` provisions them into `backend/app/models`. The downloader uses the `certifi` certificate bundle to avoid relying on a broken or incomplete local Python certificate chain.
+
+## Failure handling
+
+- Missing camera: backend remains available and reports camera state through `/health`.
+- Missing models: automatic provisioning is attempted unless disabled.
+- Missing landmarks: ergonomic calculations degrade gracefully rather than raising.
+- Lost WebSocket: frontend reconnects with bounded backoff.
+- Port collision: the macOS launcher exits with a clear diagnostic.
+- Ctrl+Z / suspended launcher: the launcher traps the signal and releases the child backend process.
+
+## Deployment boundary
+
+The current architecture should not be deployed unchanged to a remote server for public browser users. A remote Python process would look for a webcam on the server, not on the visitor's device.
+
+A hosted version should move camera capture into the browser and explicitly redesign where inference occurs.

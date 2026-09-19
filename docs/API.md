@@ -1,163 +1,80 @@
-# ErgoVision API
+# API Reference
 
-## Base URL
+Base URL for local use: `http://127.0.0.1:8000`
 
-```
-http://localhost:8000
-```
+Interactive OpenAPI documentation: `http://127.0.0.1:8000/docs`
 
-## Endpoints
+## Health
 
-### Health Check
+### `GET /health`
 
-```
-GET /health
-```
-
-Response:
 ```json
 {
   "status": "healthy",
   "camera_available": true,
   "model_loaded": true,
-  "uptime_seconds": 342.1
+  "demo_mode": false,
+  "uptime_seconds": 342.1,
+  "fps": 29.8
 }
 ```
 
-### Current Posture
+## Current posture
 
-```
-GET /api/posture/current
-```
+### `GET /api/posture/current`
 
-Response:
-```json
-{
-  "score": 82,
-  "status": "GOOD",
-  "measurements": {
-    "head_tilt_degrees": 4.2,
-    "shoulder_alignment_score": 0.94,
-    "shoulder_alignment_degrees": 3.1,
-    "neck_offset": 0.05,
-    "forward_head_indicator": 0.32,
-    "gaze_vertical_degrees": 8.5
-  },
-  "feedback": ["Your posture looks good."],
-  "timestamp": "2025-01-15T10:30:45.123Z",
-  "person_detected": true
-}
-```
+Returns score, status, measurements, feedback, timestamp and person detection state.
 
-### Session Statistics
+Status values are `GOOD`, `WARNING`, `BAD` and `NO_PERSON`.
 
-```
-GET /api/session/stats
-```
+## Session
 
-Response:
-```json
-{
-  "session_duration_seconds": 1961,
-  "good_duration_seconds": 1392,
-  "warning_duration_seconds": 412,
-  "bad_duration_seconds": 157,
-  "good_percentage": 71.0,
-  "warning_percentage": 21.0,
-  "bad_percentage": 8.0,
-  "warning_count": 14,
-  "average_score": 78.5,
-  "current_score": 82,
-  "longest_poor_posture_seconds": 95
-}
-```
+### `GET /api/session/stats`
 
-### Configuration
+Returns duration by posture state, percentages, counts, average/current score, longest poor-posture interval and whether session accounting is active.
 
-```
-GET /api/config
-```
+### `POST /api/session/start`
 
-Response:
-```json
-{
-  "head_tilt_warning_degrees": 8.0,
-  "head_tilt_bad_degrees": 15.0,
-  "shoulder_alignment_warning_degrees": 5.0,
-  "shoulder_alignment_bad_degrees": 10.0,
-  "neck_offset_warning": 0.15,
-  "neck_offset_bad": 0.30,
-  "forward_head_warning": 0.6,
-  "forward_head_bad": 0.8,
-  "gaze_warning_degrees": 15.0,
-  "gaze_bad_degrees": 25.0,
-  "score_good_threshold": 70,
-  "score_warning_threshold": 40,
-  "smoothing_alpha": 0.3,
-  "warning_frames_before_escalation": 30,
-  "bad_frames_before_escalation": 60,
-  "camera_index": 0,
-  "frame_width": 640,
-  "frame_height": 480,
-  "target_fps": 30
-}
-```
+Resumes session accounting.
 
-### Camera Stream
+### `POST /api/session/stop`
 
-```
-GET /api/stream
-```
+Pauses session accounting.
 
-Returns an MJPEG stream of annotated camera frames. Content-Type: multipart/x-mixed-replace; boundary=frame
+### `POST /api/session/reset`
 
-### Processed Frame (single)
+Clears session statistics and starts a fresh session.
 
-```
-GET /api/stream/frame
-```
+## Configuration
 
-Returns a single JPEG frame with landmarks drawn.
+### `GET /api/config`
+
+Returns runtime ergonomic and capture configuration.
+
+## Camera stream
+
+### `GET /api/stream`
+
+Returns an MJPEG stream of the most recent annotated frame.
+
+### `GET /api/stream/frame`
+
+Returns the latest annotated JPEG frame with `Cache-Control: no-store`.
 
 ## WebSocket
 
-### Posture Updates
+### `WS /ws/posture`
 
-```
-WS /ws/posture
-```
+Streams the same posture event shape returned by `/api/posture/current`. The frontend automatically reconnects after temporary disconnects.
 
-Receives real-time posture updates as JSON:
+## Errors
 
-```json
-{
-  "score": 82,
-  "status": "GOOD",
-  "measurements": {
-    "head_tilt_degrees": 4.2,
-    "shoulder_alignment_score": 0.94,
-    "shoulder_alignment_degrees": 3.1,
-    "neck_offset": 0.05,
-    "forward_head_indicator": 0.32,
-    "gaze_vertical_degrees": 8.5
-  },
-  "feedback": ["Your posture looks good."],
-  "timestamp": "2025-01-15T10:30:45.123Z",
-  "person_detected": true
-}
-```
-
-Updates are sent at approximately 10-15 Hz (every processed frame that differs
-significantly from the last update).
-
-## Error Responses
+FastAPI errors use the standard shape:
 
 ```json
 {
-  "detail": "Camera not available"
+  "detail": "Pipeline not initialized"
 }
 ```
 
-Status codes:
-- 200: Success
-- 503: Camera not available or model not loaded
+Typical status codes are `200`, `404` and `503`.

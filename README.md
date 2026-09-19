@@ -1,115 +1,137 @@
+<div align="center">
+
 # ErgoVision
 
-ErgoVision is a privacy-focused, webcam-based ergonomics and posture monitoring app. It runs locally, analyzes face and pose landmarks with MediaPipe, and shows live posture feedback in a React dashboard.
+**Privacy-first, real-time posture monitoring that runs locally on your computer.**
 
-**ErgoVision is not a medical diagnostic system.** It provides ergonomic indicators and reminders, not clinical assessments.
+[![CI](https://github.com/mjkr-1/Ergo-Vision/actions/workflows/ci.yml/badge.svg)](https://github.com/mjkr-1/Ergo-Vision/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://www.python.org/)
+[![React 18](https://img.shields.io/badge/React-18-61DAFB.svg)](https://react.dev/)
 
-## Features
+ErgoVision uses OpenCV and MediaPipe to estimate ergonomic posture indicators from a webcam, then presents live feedback, session metrics, and a posture score in a local React dashboard.
 
-- Real-time webcam posture monitoring
+**Ergonomic guidance only. ErgoVision is not a medical device and does not provide diagnosis or treatment.**
+
+</div>
+
+## Highlights
+
+- Local webcam processing with no cloud inference
+- Face and pose landmark analysis with MediaPipe Tasks
 - Head tilt, shoulder alignment, neck offset, forward-head and gaze indicators
-- 0-100 posture score with GOOD / WARNING / BAD states
-- Live landmark overlay
+- 0–100 posture score with GOOD / WARNING / BAD states
+- Live annotated camera stream
 - Actionable posture feedback
-- Session timing, posture percentages and average score
-- Pause, resume and reset session controls
-- Demo mode when a camera is unavailable
-- Automatic MediaPipe model download
-- Single-server production mode after the frontend is built
-- Local-only processing with no footage saved to disk
+- Session timing, posture percentages, warning counts and average score
+- Pause, resume and reset controls
+- Demo mode for development without a webcam
+- Automatic MediaPipe model provisioning
+- Single-server production mode after the frontend build
+- macOS setup, diagnostics and safe shutdown scripts
+- Backend tests and frontend build validation in GitHub Actions
 
-## Mac Quick Start
+## Quick start on macOS
 
-Requirements:
-
-- macOS
-- Python 3.11+
-- Node.js 18+
-- A webcam
-
-Clone and set up:
+Prerequisites: Python 3.11+, Node.js 18+, Git and a webcam.
 
 ```bash
 git clone https://github.com/mjkr-1/Ergo-Vision.git
 cd Ergo-Vision
 bash scripts/setup_mac.sh
-```
-
-Run:
-
-```bash
 bash scripts/run_mac.sh
 ```
 
-The app opens at:
+ErgoVision opens at `http://127.0.0.1:8000`.
+
+On the first camera run, macOS may ask Terminal or Python for camera access. Allow it under **System Settings → Privacy & Security → Camera**.
+
+To stop ErgoVision, use **Ctrl+C**. The launcher also handles **Ctrl+Z** defensively so the webcam is released instead of leaving a suspended process behind.
+
+## Repository layout
 
 ```text
-http://127.0.0.1:8000
+Ergo-Vision/
+├── backend/                 FastAPI, computer vision and ergonomics engine
+│   ├── app/
+│   │   ├── api/             REST and WebSocket interfaces
+│   │   ├── ergonomics/      geometry, measurements, classification and scoring
+│   │   ├── session/         in-memory session tracking
+│   │   └── vision/          camera, landmarks and MediaPipe model handling
+│   └── tests/               backend unit and integration tests
+├── frontend/                React + Vite + TypeScript dashboard
+├── docs/                    architecture, API, model, privacy and troubleshooting
+├── scripts/                 setup, run, diagnostics and validation helpers
+└── .github/                 CI, Dependabot and contribution templates
 ```
 
-On the first real-camera run, macOS may ask Terminal or Python for camera permission. If the camera is unavailable, open **System Settings → Privacy & Security → Camera** and allow the terminal application you are using.
+## Development
 
-## MediaPipe Models
-
-The `.task` model files are intentionally not stored in Git. ErgoVision downloads the official Face Landmarker and Pose Landmarker Lite model bundles during Mac setup and also attempts to provision them automatically on first backend startup.
-
-To disable automatic downloads:
+Create the environment and install dependencies:
 
 ```bash
-AUTO_DOWNLOAD_MODELS=0 python -m uvicorn app.main:app --port 8000
+bash scripts/setup_mac.sh
 ```
 
-## Development Mode
-
-Backend:
+Backend development server:
 
 ```bash
+source .venv/bin/activate
 cd backend
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-Frontend:
+Frontend development server, in a second terminal:
 
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
 
-Then open `http://127.0.0.1:5173`.
+Open `http://127.0.0.1:5173`.
 
-## Demo Mode
+### Demo mode
 
-macOS / Linux:
+Demo mode runs the complete posture pipeline with simulated landmarks and does not require a webcam or MediaPipe model files.
 
 ```bash
 cd backend
 DEMO_MODE=1 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-Windows PowerShell:
+## Validation
 
-```powershell
-cd backend
-$env:DEMO_MODE="1"
-python -m uvicorn app.main:app --reload --port 8000
+Run the full local check:
+
+```bash
+bash scripts/check.sh
 ```
 
-Demo mode generates local simulated landmarks and does not need a webcam or model files.
-
-## Tests
+Or run each part separately:
 
 ```bash
 cd backend
 python -m pytest tests/ -v
 ```
 
-Frontend production build:
-
 ```bash
 cd frontend
 npm run build
 ```
+
+GitHub Actions repeats the backend and frontend checks on every push and pull request.
+
+## Diagnostics
+
+For a quick local environment audit:
+
+```bash
+bash scripts/doctor_mac.sh
+```
+
+This checks Python, Node, the virtual environment, frontend build, MediaPipe model files, package imports and port availability without opening the webcam.
+
+See [Troubleshooting](docs/TROUBLESHOOTING.md) for camera permissions, occupied ports, model download errors and suspended processes.
 
 ## Architecture
 
@@ -118,56 +140,85 @@ Webcam
   ↓
 OpenCV capture
   ↓
-MediaPipe face + pose landmarks
+MediaPipe Face + Pose Landmarkers
+  ↓
+Landmark merge
   ↓
 Measurements → smoothing → classification → score → feedback
   ↓
+PosturePipeline
+  ├─ cached annotated JPEG
+  ├─ session tracker
+  └─ current posture event
+  ↓
 FastAPI
   ├─ REST API
-  ├─ WebSocket posture updates
-  └─ cached MJPEG stream
+  ├─ WebSocket updates
+  ├─ MJPEG stream
+  └─ built React application
   ↓
-React dashboard
+Local dashboard
 ```
 
-The posture pipeline is the only webcam consumer. It caches the latest annotated JPEG so the dashboard stream cannot compete with posture analysis for camera frames.
+The posture pipeline is the single owner of webcam capture. Other consumers read cached results, preventing the dashboard stream from competing with posture analysis for frames.
+
+Read the full [architecture document](docs/ARCHITECTURE.md).
 
 ## Privacy
 
-- Webcam processing runs locally
-- Camera frames are not uploaded
-- Footage is not saved
-- No external inference API is used
-- Session statistics stay in memory and reset when the app exits
-- Network access is only needed when installing dependencies or downloading the MediaPipe model bundles
+ErgoVision is deliberately local-first:
 
-## Important Deployment Note
+- webcam frames are processed on the computer running the backend
+- raw footage is not persisted by the application
+- no external AI or inference API is used
+- posture session data is held in memory only
+- the application does not require an account
+- network access is only needed for installation, model downloads and normal package management
 
-The current architecture intentionally reads the webcam from the machine running the Python backend. That makes ErgoVision a local application. Hosting this backend on a remote cloud server would make it look for a camera on that server rather than on the visitor's laptop.
+See [Privacy](docs/PRIVACY.md) for the detailed data-flow explanation.
 
-If you later want a public hosted website, the camera-capture layer should be moved into the browser and frames or landmarks should be processed client-side or sent to an explicitly designed backend.
+## Configuration
 
-## Environment Variables
+Copy the example configuration if you want local overrides:
+
+```bash
+cp .env.example .env
+```
+
+`bash scripts/run_mac.sh` loads `.env` automatically when present.
 
 | Variable | Default | Purpose |
 |---|---:|---|
-| `DEMO_MODE` | `0` | Use simulated data instead of real CV |
-| `AUTO_DOWNLOAD_MODELS` | `1` | Download missing MediaPipe models |
+| `DEMO_MODE` | `0` | Use simulated data instead of the camera |
+| `AUTO_DOWNLOAD_MODELS` | `1` | Provision missing MediaPipe models |
 | `CAMERA_INDEX` | `0` | OpenCV camera index |
 | `FRAME_WIDTH` | `640` | Capture width |
 | `FRAME_HEIGHT` | `480` | Capture height |
 | `TARGET_FPS` | `30` | Analysis capture target |
 | `STREAM_FPS` | `15` | Dashboard MJPEG stream target |
 | `CORS_ORIGINS` | local Vite origins | Allowed development origins |
+| `PORT` | `8000` | Local server port used by `run_mac.sh` |
 
-## Limitations
+## API
 
-- Standard webcams provide 2D image information only
-- Forward-head and distance indicators are approximations
-- Lighting and camera angle affect landmark accuracy
-- Single-person monitoring only
-- This is an ergonomics tool, not a clinical device
+The backend exposes health, posture, session, configuration, stream and WebSocket interfaces. Interactive OpenAPI documentation is available while the backend is running at `http://127.0.0.1:8000/docs`.
+
+See [API reference](docs/API.md).
+
+## Project status and roadmap
+
+The current version is a local desktop-style web application intended for single-user ergonomic feedback. Calibration, session history, desktop packaging and browser-native camera processing are natural future extensions.
+
+See [Roadmap](docs/ROADMAP.md).
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Bug reports and feature requests have structured GitHub issue templates.
+
+## Security
+
+Please do not publish security-sensitive reports in a public issue. See [SECURITY.md](SECURITY.md) for reporting guidance.
 
 ## License
 
-MIT
+Released under the [MIT License](LICENSE).

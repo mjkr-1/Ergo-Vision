@@ -1,0 +1,41 @@
+name: Feature request
+description: Propose an improvement to ErgoVision
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What user need would this feature address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behaviour you would like.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Computer vision
+        - Ergonomic model
+        - Backend/API
+        - Frontend/UI
+        - Session tracking
+        - macOS tooling
+        - Documentation
+        - Other
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy or data-flow impact
+      description: Mention any effect on camera handling, persistence, networking or telemetry.

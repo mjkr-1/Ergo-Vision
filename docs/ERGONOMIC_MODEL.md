@@ -1,118 +1,75 @@
 # Ergonomic Model
 
+## Scope
+
+ErgoVision derives ergonomic indicators from 2D image-space landmarks. These values are designed for real-time posture feedback, not clinical measurement.
+
 ## Measurements
 
-All measurements are derived from 2D image-space landmarks. They are geometric
-indicators, not clinical measurements.
+### Head tilt
 
-### 1. Head Tilt (Lateral)
+The line between the outer eye landmarks is compared with the horizontal axis. The absolute angle is reported in degrees.
 
-**What**: How much the head is tilted left/right relative to vertical.
+Default thresholds: warning at 8°, bad at 15°.
 
-**Method**: Compute the angle between the line connecting left-eye-outer and
-right-eye-outer relative to horizontal. Alternatively, use the nose-to-midpoint
-of eyes relative to vertical.
+### Shoulder alignment
 
-**Output**: Angle in degrees. 0 = perfectly upright.
+The line between shoulder landmarks is compared with the horizontal axis. ErgoVision exposes both the angular difference and a normalized alignment score.
 
-**Thresholds**: Warning at ~8 degrees, Bad at ~15 degrees.
+Default thresholds: warning at 5°, bad at 10°.
 
-### 2. Shoulder Alignment
+### Neck offset
 
-**What**: How level the shoulders are.
+The horizontal position of the nose is compared with the midpoint of both shoulders and normalized by shoulder width.
 
-**Method**: Compare the Y-coordinates of left and right shoulder landmarks.
-Compute the angular difference from horizontal.
+Default thresholds: warning at 0.15, bad at 0.30.
 
-**Output**: Alignment score (0-1 where 1 = perfectly level) and angle in degrees.
+### Forward-head indicator
 
-**Thresholds**: Warning at ~5 degrees difference, Bad at ~10 degrees.
+Because a normal webcam does not provide reliable metric depth, ErgoVision uses apparent face size relative to shoulder width as a proxy. This is an indicator rather than a physical distance measurement.
 
-### 3. Head-Shoulder Center Offset (Neck Posture)
+Default thresholds: warning at 0.60, bad at 0.80.
 
-**What**: Whether the head is centered over the shoulders or leaning.
+### Vertical gaze indicator
 
-**Method**: Compute the horizontal offset between the nose landmark and the
-midpoint of the two shoulders, normalized by shoulder width.
+The forehead-to-nose orientation is used as a supplementary indicator for looking downward.
 
-**Output**: Normalized offset (-1 to 1, where 0 = centered).
+Default thresholds: warning at 15°, bad at 25°.
 
-**Thresholds**: Warning at ~0.15 offset, Bad at ~0.30 offset.
+## Score
 
-### 4. Forward Head Indicator
+The 0–100 score starts at 100 and subtracts weighted penalties once a measurement moves beyond its warning threshold.
 
-**What**: Whether the head appears to be jutting forward.
-
-**Method**: Use the apparent size of the face relative to shoulder width as a
-proxy. A larger face-to-shoulder ratio may indicate the head is closer to the
-camera (forward). Also use the vertical position of the chin relative to
-shoulders.
-
-**Note**: This is a 2D approximation. True forward-head posture requires depth
-information or calibrated side-view analysis.
-
-**Output**: Forward indicator score (0-1).
-
-**Thresholds**: Warning at ~0.6, Bad at ~0.8.
-
-### 5. Gaze Vertical Indicator
-
-**What**: Whether the user is looking down at the screen excessively.
-
-**Method**: Use the vertical position of the iris/eye landmarks relative to
-the nose to estimate gaze direction.
-
-**Output**: Vertical gaze angle in degrees.
-
-**Thresholds**: Warning at ~15 degrees below horizontal, Bad at ~25 degrees.
-
-## Scoring
-
-The posture score is a 0-100 integer derived from weighted penalties:
-
-```
-score = 100
-  - head_tilt_penalty      (max 35)
-  - shoulder_penalty       (max 25)
-  - neck_offset_penalty    (max 20)
-  - forward_head_penalty   (max 15)
-  - gaze_penalty           (max 5)
+```text
+head tilt        max 35 points
+shoulder angle   max 25 points
+neck offset      max 20 points
+forward head     max 15 points
+gaze              max 5 points
 ```
 
-Each penalty scales linearly from 0 (good) to its maximum (bad).
-
-The final score is clamped to [0, 100].
-
-### Weight Rationale
-
-- Head tilt and shoulder alignment are the most observable indicators
-- Neck offset and forward head are important but harder to measure precisely
-- Gaze is supplementary
-
-These are prototype weights and should be tuned based on user testing.
+Each penalty scales linearly between warning and bad thresholds.
 
 ## Classification
 
-| Score Range | Status |
-|-------------|--------|
-| 70-100 | GOOD |
-| 40-69 | WARNING |
-| 0-39 | BAD |
+GOOD / WARNING / BAD classification is not a simple score-range lookup. The classifier examines the worst threshold severity across current measurements and applies temporal streaks before escalating posture state.
 
-With optional duration-based escalation: sustained WARNING for >60 seconds
-escalates to BAD.
+By default, warning-level measurements must persist for 30 processed frames before WARNING and bad-level measurements for 60 processed frames before BAD. A good frame resets escalation streaks. Missing-person state produces `NO_PERSON`.
 
-## Temporal Smoothing
+## Temporal smoothing
 
-Exponential Moving Average (EMA) with alpha=0.3:
+ErgoVision applies an exponential moving average:
 
-```
-smoothed = alpha * new_value + (1 - alpha) * previous_smoothed
+```text
+smoothed = alpha × new + (1 - alpha) × previous
 ```
 
-Applied to each measurement independently. This reduces frame-to-frame jitter
-without introducing significant lag. Alpha=0.3 provides ~3 frame responsiveness.
+The default alpha is 0.3. Smoothing resets when no person is detected.
 
-Classification uses an additional hysteresis mechanism: the status must remain
-different for at least `POSTURE_WARNING_FRAMES` or `POSTURE_BAD_FRAMES`
-consecutive frames before the classification changes.
+## Limitations
+
+- 2D landmarks cannot measure true spinal curvature or physical camera distance.
+- Perspective and webcam placement affect apparent geometry.
+- Lighting and occlusion affect landmark quality.
+- Thresholds are prototype ergonomic heuristics and have not been clinically validated.
+- The system is designed for one visible user at a time.
