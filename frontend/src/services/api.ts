@@ -1,11 +1,26 @@
-import type { AppConfig, HealthStatus, PostureEvent, SessionStats } from '../types'
+import type {
+  AppConfig,
+  CalibrationProfile,
+  HealthStatus,
+  PostureEvent,
+  SessionStats,
+} from '../types'
 
 const BASE = '/api'
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init)
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-  return res.json()
+  const response = await fetch(url, init)
+  if (!response.ok) {
+    let message = `Request failed: ${response.status}`
+    try {
+      const body = await response.json()
+      if (typeof body?.detail === 'string') message = body.detail
+    } catch {
+      // keep the HTTP fallback message
+    }
+    throw new Error(message)
+  }
+  return response.json()
 }
 
 export const api = {
@@ -15,6 +30,9 @@ export const api = {
   sessionStart: () => requestJson<SessionStats>(`${BASE}/session/start`, { method: 'POST' }),
   sessionStop: () => requestJson<SessionStats>(`${BASE}/session/stop`, { method: 'POST' }),
   sessionReset: () => requestJson<SessionStats>(`${BASE}/session/reset`, { method: 'POST' }),
+  calibration: () => requestJson<CalibrationProfile>(`${BASE}/calibration`),
+  captureCalibration: () => requestJson<CalibrationProfile>(`${BASE}/calibration/capture`, { method: 'POST' }),
+  clearCalibration: () => requestJson<CalibrationProfile>(`${BASE}/calibration`, { method: 'DELETE' }),
   config: () => requestJson<AppConfig>(`${BASE}/config`),
 }
 

@@ -1,12 +1,14 @@
 import logging
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 from typing import Optional
 
 import cv2
 
 from .config import WEBSOCKET_UPDATE_INTERVAL
+from .ergonomics.calibration import CalibrationProfile
 from .ergonomics.classifier import PostureClassifier
 from .ergonomics.feedback import FeedbackEngine
 from .ergonomics.measurements import ErgonomicMeasurements, compute_measurements
@@ -27,6 +29,7 @@ class PosturePipeline:
         self.feedback_engine = FeedbackEngine()
         self.smoother = SmoothingBuffer()
         self.tracker = SessionTracker()
+        self.calibration = CalibrationProfile.load()
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
@@ -36,6 +39,7 @@ class PosturePipeline:
         self._current_score = 0
         self._current_frame_jpeg: bytes | None = None
         self._last_event: dict | None = None
+        self._recent_measurements: deque[ErgonomicMeasurements] = deque(maxlen=90)
 
     def start(self):
         if self._running:
@@ -64,6 +68,10 @@ class PosturePipeline:
             landmarks, annotated = self.detector.process_frame(frame)
             measurements = compute_measurements(landmarks)
             smoothed = self.smoother.smooth(measurements)
+            if smoothed.person_detected:
+                self._recent_measurements.append(smoothed)
+            smoothed.slouch_indicator = self.calibration.slouch_indicator(smoothed)
+
             status = self.classifier.classify(smoothed)
             score, _breakdown = compute_score(smoothed)
             encoded, jpeg = cv2.imencode(".jpg", annotated)
@@ -99,6 +107,11 @@ class PosturePipeline:
                 "neck_offset": round(measurements.neck_offset, 3),
                 "forward_head_indicator": round(measurements.forward_head_indicator, 2),
                 "gaze_vertical_degrees": round(measurements.gaze_vertical_degrees, 1),
+                "torso_lean_degrees": round(measurements.torso_lean_degrees, 1),
+                "torso_length_ratio": round(measurements.torso_length_ratio, 3),
+                "head_shoulder_gap_ratio": round(measurements.head_shoulder_gap_ratio, 3),
+                "torso_depth_ratio": round(measurements.torso_depth_ratio, 3),
+                "slouch_indicator": round(measurements.slouch_indicator, 3),
             },
             "feedback": feedback,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -122,3 +135,17 @@ class PosturePipeline:
 
     def get_session_stats(self) -> dict:
         return self.tracker.get_stats().__dict__
+
+    def capture_calibration(self) -> dict:
+        samples = list(self._recent_measurements)[-60:]
+        self.calibration.capture(samples)
+        self.classifier.reset()
+        return self.calibration.as_dict()
+
+    def clear_calibration(self) -> dict:
+        self.calibration.clear()
+        self.classifier.reset()
+        return self.calibration.as_dict()
+
+    def get_calibration(self) -> dict:
+        return self.calibration.as_dict()

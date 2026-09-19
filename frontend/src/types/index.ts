@@ -7,6 +7,11 @@ export interface Measurements {
   neck_offset: number
   forward_head_indicator: number
   gaze_vertical_degrees: number
+  torso_lean_degrees: number
+  torso_length_ratio: number
+  head_shoulder_gap_ratio: number
+  torso_depth_ratio: number
+  slouch_indicator: number
 }
 
 export interface PostureEvent {
@@ -36,6 +41,26 @@ export interface SessionStats {
   active: boolean
 }
 
+export interface CalibrationProfile {
+  calibrated: boolean
+  captured_at: string | null
+  torso_length_ratio: number
+  head_shoulder_gap_ratio: number
+  torso_depth_ratio: number
+  forward_head_indicator: number
+  samples: number
+}
+
+export interface SessionHistoryEntry {
+  id: string
+  ended_at: string
+  duration_seconds: number
+  average_score: number
+  good_percentage: number
+  warning_percentage: number
+  bad_percentage: number
+}
+
 export interface AppConfig {
   head_tilt_warning_degrees: number
   head_tilt_bad_degrees: number
@@ -47,6 +72,10 @@ export interface AppConfig {
   forward_head_bad: number
   gaze_warning_degrees: number
   gaze_bad_degrees: number
+  torso_lean_warning_degrees: number
+  torso_lean_bad_degrees: number
+  slouch_warning: number
+  slouch_bad: number
   score_good_threshold: number
   score_warning_threshold: number
   smoothing_alpha: number

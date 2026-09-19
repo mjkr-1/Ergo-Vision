@@ -2,30 +2,37 @@
 
 This roadmap is directional rather than a commitment to dates.
 
+## Completed foundations
+
+- personal neutral-posture calibration
+- torso/slouch detection using shoulders, hips and relative depth
+- live posture trend visualization
+- local browser session history
+- professional CI and contribution workflow
+
 ## Near term
 
-- calibration flow for individual camera placement
-- richer posture trend visualization during a session
 - configurable reminders and break prompts
 - improved landmark quality/confidence reporting
+- camera/device selector
+- exportable session summaries
 - additional frontend tests
 - automated release packaging
 
 ## Product maturity
 
-- persistent local session history with explicit user controls
-- exportable session summaries
 - packaged macOS desktop distribution
-- camera/device selector
+- fully persistent local session database with explicit retention controls
 - accessible colour and reduced-motion options
 - configurable ergonomic thresholds and profiles
+- guided camera-position onboarding
 
 ## Research and architecture
 
-- side-view posture mode
-- browser-native capture/inference for a truly hosted version
+- dedicated side-view posture mode
 - evaluation dataset for threshold tuning
 - stronger confidence modelling around 2D approximations
+- browser-native capture/inference for a truly hosted version
 
 ## Explicit non-goals for the current version
 

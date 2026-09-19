@@ -5,7 +5,13 @@ from fastapi import APIRouter, HTTPException
 
 import app.config as config
 from ..pipeline import PosturePipeline
-from .schemas import ConfigResponse, HealthResponse, PostureCurrent, SessionStatsResponse
+from .schemas import (
+    CalibrationResponse,
+    ConfigResponse,
+    HealthResponse,
+    PostureCurrent,
+    SessionStatsResponse,
+)
 
 router = APIRouter()
 
@@ -70,6 +76,25 @@ def session_reset():
     return SessionStatsResponse(**pipe.get_session_stats())
 
 
+@router.get("/api/calibration", response_model=CalibrationResponse)
+def calibration_status():
+    return CalibrationResponse(**_require_pipeline().get_calibration())
+
+
+@router.post("/api/calibration/capture", response_model=CalibrationResponse)
+def calibration_capture():
+    pipe = _require_pipeline()
+    try:
+        return CalibrationResponse(**pipe.capture_calibration())
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete("/api/calibration", response_model=CalibrationResponse)
+def calibration_clear():
+    return CalibrationResponse(**_require_pipeline().clear_calibration())
+
+
 @router.get("/api/config", response_model=ConfigResponse)
 def get_config():
     return ConfigResponse(
@@ -83,6 +108,10 @@ def get_config():
         forward_head_bad=config.FORWARD_HEAD_BAD,
         gaze_warning_degrees=config.GAZE_WARNING_DEGREES,
         gaze_bad_degrees=config.GAZE_BAD_DEGREES,
+        torso_lean_warning_degrees=config.TORSO_LEAN_WARNING_DEGREES,
+        torso_lean_bad_degrees=config.TORSO_LEAN_BAD_DEGREES,
+        slouch_warning=config.SLOUCH_WARNING,
+        slouch_bad=config.SLOUCH_BAD,
         score_good_threshold=config.SCORE_GOOD_THRESHOLD,
         score_warning_threshold=config.SCORE_WARNING_THRESHOLD,
         smoothing_alpha=config.SMOOTHING_ALPHA,

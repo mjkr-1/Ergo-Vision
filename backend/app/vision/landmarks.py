@@ -6,6 +6,7 @@ from typing import Optional
 class Landmark2D:
     x: float
     y: float
+    z: float = 0.0
     visibility: float = 0.0
     presence: float = 0.0
 
@@ -51,49 +52,53 @@ FACE_LANDMARK_NAMES = {
 }
 
 POSE_LANDMARK_NAMES = {
+    "nose": 0,
+    "left_eye": 2,
+    "right_eye": 5,
+    "left_ear": 7,
+    "right_ear": 8,
     "left_shoulder": 11,
     "right_shoulder": 12,
     "left_elbow": 13,
     "right_elbow": 14,
     "left_wrist": 15,
     "right_wrist": 16,
-    "nose": 0,
-    "left_eye": 2,
-    "right_eye": 5,
-    "left_ear": 7,
-    "right_ear": 8,
+    "left_hip": 23,
+    "right_hip": 24,
 }
 
 
+def _to_landmark(lm) -> Landmark2D:
+    return Landmark2D(
+        x=lm.x,
+        y=lm.y,
+        z=getattr(lm, "z", 0.0) or 0.0,
+        visibility=getattr(lm, "visibility", 0.0) or 0.0,
+        presence=getattr(lm, "presence", 0.0) or 0.0,
+    )
+
+
 def landmarks_from_face_results(face_landmarks_list) -> Optional[LandmarkSet]:
-    if not face_landmarks_list or len(face_landmarks_list) == 0:
+    if not face_landmarks_list:
         return None
     face_lms = face_landmarks_list[0]
-    landmarks = {}
-    for name, idx in FACE_LANDMARK_NAMES.items():
-        if idx < len(face_lms):
-            lm = face_lms[idx]
-            landmarks[name] = Landmark2D(
-                x=lm.x, y=lm.y,
-                visibility=getattr(lm, 'visibility', 0.0) or 0.0,
-                presence=getattr(lm, 'presence', 0.0) or 0.0,
-            )
+    landmarks = {
+        name: _to_landmark(face_lms[idx])
+        for name, idx in FACE_LANDMARK_NAMES.items()
+        if idx < len(face_lms)
+    }
     return LandmarkSet(landmarks=landmarks) if landmarks else None
 
 
 def landmarks_from_pose_results(pose_landmarks_list) -> Optional[LandmarkSet]:
-    if not pose_landmarks_list or len(pose_landmarks_list) == 0:
+    if not pose_landmarks_list:
         return None
     pose_lms = pose_landmarks_list[0]
-    landmarks = {}
-    for name, idx in POSE_LANDMARK_NAMES.items():
-        if idx < len(pose_lms):
-            lm = pose_lms[idx]
-            landmarks[name] = Landmark2D(
-                x=lm.x, y=lm.y,
-                visibility=getattr(lm, 'visibility', 0.0) or 0.0,
-                presence=getattr(lm, 'presence', 0.0) or 0.0,
-            )
+    landmarks = {
+        name: _to_landmark(pose_lms[idx])
+        for name, idx in POSE_LANDMARK_NAMES.items()
+        if idx < len(pose_lms)
+    }
     return LandmarkSet(landmarks=landmarks) if landmarks else None
 
 

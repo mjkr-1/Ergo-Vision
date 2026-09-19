@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
+import CalibrationPanel from './components/CalibrationPanel'
 import CameraFeed from './components/CameraFeed'
 import Feedback from './components/Feedback'
 import Metrics from './components/Metrics'
 import PostureScore from './components/PostureScore'
+import SessionHistory from './components/SessionHistory'
 import SessionPanel from './components/SessionPanel'
+import TrendChart from './components/TrendChart'
 import { usePostureSocket } from './hooks/usePostureSocket'
 import { api } from './services/api'
 import type { AppConfig, HealthStatus } from './types'
@@ -18,10 +21,10 @@ export default function App() {
     let disposed = false
     const load = async () => {
       try {
-        const [cfg, h] = await Promise.all([api.config(), api.health()])
+        const [cfg, currentHealth] = await Promise.all([api.config(), api.health()])
         if (!disposed) {
           setConfig(cfg)
-          setHealth(h)
+          setHealth(currentHealth)
           setBackendReachable(true)
         }
       } catch {
@@ -46,7 +49,7 @@ export default function App() {
       <header className="header">
         <div>
           <h1 className="title">ErgoVision</h1>
-          <p className="subtitle">Private, local posture monitoring while you work</p>
+          <p className="subtitle">Private, calibrated posture monitoring while you work</p>
         </div>
         <div className="header-badges">
           {health?.demo_mode && <span className="badge demo">DEMO</span>}
@@ -76,14 +79,17 @@ export default function App() {
         <section className="grid-main">
           <PostureScore posture={posture} connected={connected} />
           <CameraFeed />
+          <TrendChart posture={posture} />
           <Feedback posture={posture} />
         </section>
         <aside className="grid-side">
+          <CalibrationPanel />
           <Metrics posture={posture} config={config} />
           <SessionPanel />
+          <SessionHistory />
           <div className="card privacy-card">
             <div className="card-title">Privacy</div>
-            <p>Video processing stays on this computer. Camera frames are not stored or uploaded.</p>
+            <p>Video processing stays on this computer. Camera frames are not stored or uploaded. Calibration is stored locally on this Mac; session history stays in this browser.</p>
           </div>
         </aside>
       </main>

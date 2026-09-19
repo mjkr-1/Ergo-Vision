@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../services/api'
 import type { SessionStats } from '../types'
+import { archiveSession } from '../utils/history'
 import { formatDuration, formatPercent } from '../utils/format'
 
 type SessionAction = 'start' | 'stop' | 'reset'
@@ -14,9 +15,9 @@ export default function SessionPanel() {
     let disposed = false
     const load = async () => {
       try {
-        const s = await api.sessionStats()
+        const next = await api.sessionStats()
         if (!disposed) {
-          setStats(s)
+          setStats(next)
           setError('')
         }
       } catch {
@@ -35,6 +36,7 @@ export default function SessionPanel() {
     setBusy(action)
     setError('')
     try {
+      if (action === 'reset' && stats) archiveSession(stats)
       const next =
         action === 'start'
           ? await api.sessionStart()
@@ -100,9 +102,10 @@ export default function SessionPanel() {
           disabled={busy !== null}
           onClick={() => runAction('reset')}
         >
-          Reset
+          Finish & Reset
         </button>
       </div>
+      <p className="session-note">Finish & Reset archives the completed session locally in this browser.</p>
       {error && <p className="inline-error">{error}</p>}
     </div>
   )

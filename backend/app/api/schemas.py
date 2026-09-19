@@ -8,6 +8,11 @@ class Measurements(BaseModel):
     neck_offset: float
     forward_head_indicator: float
     gaze_vertical_degrees: float
+    torso_lean_degrees: float
+    torso_length_ratio: float
+    head_shoulder_gap_ratio: float
+    torso_depth_ratio: float
+    slouch_indicator: float
 
 
 class PostureCurrent(BaseModel):
@@ -37,6 +42,16 @@ class SessionStatsResponse(BaseModel):
     active: bool
 
 
+class CalibrationResponse(BaseModel):
+    calibrated: bool
+    captured_at: str | None
+    torso_length_ratio: float
+    head_shoulder_gap_ratio: float
+    torso_depth_ratio: float
+    forward_head_indicator: float
+    samples: int
+
+
 class ConfigResponse(BaseModel):
     head_tilt_warning_degrees: float
     head_tilt_bad_degrees: float
@@ -48,6 +63,10 @@ class ConfigResponse(BaseModel):
     forward_head_bad: float
     gaze_warning_degrees: float
     gaze_bad_degrees: float
+    torso_lean_warning_degrees: float
+    torso_lean_bad_degrees: float
+    slouch_warning: float
+    slouch_bad: float
     score_good_threshold: int
     score_warning_threshold: int
     smoothing_alpha: float

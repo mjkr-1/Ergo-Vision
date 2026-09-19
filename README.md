@@ -19,11 +19,15 @@ ErgoVision uses OpenCV and MediaPipe to estimate ergonomic posture indicators fr
 
 - Local webcam processing with no cloud inference
 - Face and pose landmark analysis with MediaPipe Tasks
-- Head tilt, shoulder alignment, neck offset, forward-head and gaze indicators
+- Head tilt, shoulder alignment, neck offset, forward-head, gaze and torso indicators
+- Calibrated slouch / hunch detection using shoulders, hips and relative pose depth
+- Personal neutral-posture calibration stored locally on the Mac
 - 0–100 posture score with GOOD / WARNING / BAD states
 - Live annotated camera stream
 - Actionable posture feedback
 - Session timing, posture percentages, warning counts and average score
+- Live two-minute posture trend chart
+- Local browser session-history summaries
 - Pause, resume and reset controls
 - Demo mode for development without a webcam
 - Automatic MediaPipe model provisioning
@@ -144,7 +148,7 @@ MediaPipe Face + Pose Landmarkers
   ↓
 Landmark merge
   ↓
-Measurements → smoothing → classification → score → feedback
+Measurements → smoothing → calibration → classification → score → feedback
   ↓
 PosturePipeline
   ├─ cached annotated JPEG
@@ -164,6 +168,13 @@ The posture pipeline is the single owner of webcam capture. Other consumers read
 
 Read the full [architecture document](docs/ARCHITECTURE.md).
 
+
+## Calibrating hunch detection
+
+For the most useful slouch detection, position the camera so your **head, shoulders and preferably hips** are visible. Sit in your normal upright posture for 2–3 seconds, then click **Calibrate upright posture** in the dashboard. ErgoVision stores only the resulting neutral measurements under `~/.ergovision/calibration.json`; no calibration images are saved.
+
+A front-facing webcam still cannot directly measure spinal curvature. ErgoVision uses visible upper-body compression, torso geometry, relative MediaPipe depth and forward-head change as posture proxies. See [Ergonomic Model](docs/ERGONOMIC_MODEL.md) for details.
+
 ## Privacy
 
 ErgoVision is deliberately local-first:
@@ -171,7 +182,8 @@ ErgoVision is deliberately local-first:
 - webcam frames are processed on the computer running the backend
 - raw footage is not persisted by the application
 - no external AI or inference API is used
-- posture session data is held in memory only
+- live session data is held in memory; completed summary statistics may be retained in this browser
+- personal calibration measurements are stored locally under `~/.ergovision/`
 - the application does not require an account
 - network access is only needed for installation, model downloads and normal package management
 
@@ -207,7 +219,7 @@ See [API reference](docs/API.md).
 
 ## Project status and roadmap
 
-The current version is a local desktop-style web application intended for single-user ergonomic feedback. Calibration, session history, desktop packaging and browser-native camera processing are natural future extensions.
+The current version is a local desktop-style web application intended for single-user ergonomic feedback. It includes personal calibration, torso/slouch detection, live trend visualization and local session-history summaries. Desktop packaging, reminders, richer confidence modelling and browser-native camera processing are the main next extensions.
 
 See [Roadmap](docs/ROADMAP.md).
 

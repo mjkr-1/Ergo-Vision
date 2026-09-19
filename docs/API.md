@@ -8,16 +8,7 @@ Interactive OpenAPI documentation: `http://127.0.0.1:8000/docs`
 
 ### `GET /health`
 
-```json
-{
-  "status": "healthy",
-  "camera_available": true,
-  "model_loaded": true,
-  "demo_mode": false,
-  "uptime_seconds": 342.1,
-  "fps": 29.8
-}
-```
+Returns backend health, camera/model state, demo mode, uptime and capture FPS.
 
 ## Current posture
 
@@ -25,7 +16,23 @@ Interactive OpenAPI documentation: `http://127.0.0.1:8000/docs`
 
 Returns score, status, measurements, feedback, timestamp and person detection state.
 
+Measurements include head tilt, shoulder alignment, neck offset, forward-head indicator, gaze, torso lean, torso geometry and the calibrated slouch indicator.
+
 Status values are `GOOD`, `WARNING`, `BAD` and `NO_PERSON`.
+
+## Calibration
+
+### `GET /api/calibration`
+
+Returns the current local calibration profile.
+
+### `POST /api/calibration/capture`
+
+Captures a neutral baseline from recent valid posture samples. The user should sit upright for 2–3 seconds before calling this endpoint. Returns `409` when there are not enough valid samples yet.
+
+### `DELETE /api/calibration`
+
+Clears the saved calibration profile and returns to default heuristics.
 
 ## Session
 
@@ -45,11 +52,13 @@ Pauses session accounting.
 
 Clears session statistics and starts a fresh session.
 
+The browser dashboard archives completed session summaries in local browser storage before reset. No images are stored.
+
 ## Configuration
 
 ### `GET /api/config`
 
-Returns runtime ergonomic and capture configuration.
+Returns runtime ergonomic and capture configuration, including torso/slouch thresholds.
 
 ## Camera stream
 
@@ -77,4 +86,4 @@ FastAPI errors use the standard shape:
 }
 ```
 
-Typical status codes are `200`, `404` and `503`.
+Typical status codes are `200`, `404`, `409` and `503`.

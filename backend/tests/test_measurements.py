@@ -1,3 +1,4 @@
+from app.ergonomics.measurements import compute_measurements
 from app.vision.landmarks import Landmark2D, LandmarkSet
 
 
@@ -11,64 +12,75 @@ def make_landmarks(**overrides) -> LandmarkSet:
         "right_ear": Landmark2D(0.58, 0.35),
         "chin": Landmark2D(0.5, 0.42),
         "forehead": Landmark2D(0.5, 0.28),
-        "left_shoulder": Landmark2D(0.42, 0.60),
-        "right_shoulder": Landmark2D(0.58, 0.60),
+        "left_shoulder": Landmark2D(0.42, 0.60, z=0.0),
+        "right_shoulder": Landmark2D(0.58, 0.60, z=0.0),
+        "left_hip": Landmark2D(0.44, 0.88, z=0.0),
+        "right_hip": Landmark2D(0.56, 0.88, z=0.0),
     }
     base.update(overrides)
     return LandmarkSet(landmarks=base)
 
 
-def test_neutral_has_zero_tilt():
-    lm = make_landmarks()
-    from app.ergonomics.measurements import compute_measurements
-    m = compute_measurements(lm)
-    assert m.person_detected
-    assert m.head_tilt_degrees == 0.0
-    assert m.shoulder_alignment_degrees == 0.0
-    assert m.shoulder_alignment_score == 1.0
-    assert m.neck_offset == 0.0
+def test_neutral_has_zero_tilt_and_torso_lean():
+    measurement = compute_measurements(make_landmarks())
+    assert measurement.person_detected
+    assert measurement.head_tilt_degrees == 0.0
+    assert measurement.shoulder_alignment_degrees == 0.0
+    assert measurement.shoulder_alignment_score == 1.0
+    assert measurement.neck_offset == 0.0
+    assert measurement.torso_lean_degrees == 0.0
+    assert measurement.torso_length_ratio > 1.0
 
 
 def test_shoulder_imbalance_detected():
-    lm = make_landmarks(left_shoulder=Landmark2D(0.40, 0.62), right_shoulder=Landmark2D(0.60, 0.58))
-    from app.ergonomics.measurements import compute_measurements
-    m = compute_measurements(lm)
-    assert m.shoulder_alignment_degrees > 0.0
-    assert 0.0 <= m.shoulder_alignment_score < 1.0
+    landmarks = make_landmarks(
+        left_shoulder=Landmark2D(0.40, 0.62),
+        right_shoulder=Landmark2D(0.60, 0.58),
+    )
+    measurement = compute_measurements(landmarks)
+    assert measurement.shoulder_alignment_degrees > 0.0
+    assert 0.0 <= measurement.shoulder_alignment_score < 1.0
 
 
 def test_head_tilt_detected():
-    lm = make_landmarks(left_eye_outer=Landmark2D(0.44, 0.33), right_eye_outer=Landmark2D(0.56, 0.35))
-    from app.ergonomics.measurements import compute_measurements
-    m = compute_measurements(lm)
-    assert m.head_tilt_degrees > 0.0
+    landmarks = make_landmarks(
+        left_eye_outer=Landmark2D(0.44, 0.33),
+        right_eye_outer=Landmark2D(0.56, 0.35),
+    )
+    assert compute_measurements(landmarks).head_tilt_degrees > 0.0
 
 
 def test_missing_all_landmarks():
-    from app.ergonomics.measurements import compute_measurements
-    m = compute_measurements(None)
-    assert not m.person_detected
+    assert not compute_measurements(None).person_detected
 
 
-def test_missing_shoulders_graceful():
-    lm = LandmarkSet(landmarks={"nose_tip": Landmark2D(0.5, 0.35), "left_eye_outer": Landmark2D(0.45, 0.33),
-                                "right_eye_outer": Landmark2D(0.55, 0.33), "chin": Landmark2D(0.5, 0.42),
-                                "forehead": Landmark2D(0.5, 0.28), "nose_bridge": Landmark2D(0.5, 0.31)})
-    from app.ergonomics.measurements import compute_measurements
-    m = compute_measurements(lm)
-    assert m.person_detected
-    assert m.shoulder_alignment_score == 1.0
+def test_missing_hips_is_graceful():
+    landmarks = make_landmarks()
+    del landmarks.landmarks["left_hip"]
+    del landmarks.landmarks["right_hip"]
+    measurement = compute_measurements(landmarks)
+    assert measurement.person_detected
+    assert measurement.torso_length_ratio == 0.0
+    assert measurement.torso_lean_degrees == 0.0
 
 
-def test_forward_head_large_face():
-    nose = Landmark2D(0.5, 0.40)
-    lm = make_landmarks(nose_tip=nose, chin=Landmark2D(0.5, 0.50),
-                        forehead=Landmark2D(0.5, 0.10))
-    lm2 = make_landmarks()
-    lm2.landmarks["nose_tip"] = nose
-    lm2.landmarks["chin"] = Landmark2D(0.5, 0.50)
-    lm2.landmarks["forehead"] = Landmark2D(0.5, 0.10)
-    from app.ergonomics.measurements import compute_measurements
-    m = compute_measurements(lm2)
-    assert m.forward_head_indicator >= 0.0
-    assert m.forward_head_indicator <= 1.0
+def test_hunched_torso_has_high_slouch_indicator():
+    landmarks = make_landmarks(
+        left_shoulder=Landmark2D(0.42, 0.72, z=-0.10),
+        right_shoulder=Landmark2D(0.58, 0.72, z=-0.10),
+        nose_tip=Landmark2D(0.5, 0.43),
+        left_ear=Landmark2D(0.42, 0.43),
+        right_ear=Landmark2D(0.58, 0.43),
+    )
+    measurement = compute_measurements(landmarks)
+    assert measurement.torso_length_ratio < 1.35
+    assert measurement.slouch_indicator >= 0.35
+
+
+def test_side_torso_lean_detected():
+    landmarks = make_landmarks(
+        left_shoulder=Landmark2D(0.49, 0.60),
+        right_shoulder=Landmark2D(0.65, 0.60),
+    )
+    measurement = compute_measurements(landmarks)
+    assert measurement.torso_lean_degrees > 8.0

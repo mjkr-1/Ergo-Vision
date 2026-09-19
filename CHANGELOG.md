@@ -8,6 +8,13 @@ The project follows the spirit of Keep a Changelog and uses semantic versioning 
 
 ### Added
 
+- personal neutral-posture calibration persisted locally on the Mac
+- hip landmarks and relative pose depth for upper-body analysis
+- torso-lean measurement
+- calibrated slouch / hunch indicator
+- slouch-aware scoring, classification and feedback
+- live two-minute posture score trend
+- local browser session-history summaries
 - GitHub Actions validation workflow
 - Dependabot configuration
 - issue and pull request templates
@@ -17,6 +24,8 @@ The project follows the spirit of Keep a Changelog and uses semantic versioning 
 
 ### Changed
 
+- rebalanced the posture score so torso collapse and slouching materially affect the result
+- expanded the camera overlay to show shoulder-to-hip torso lines when hips are visible
 - hardened macOS setup and shutdown workflow
 - made MediaPipe model downloads use a trusted certificate bundle
 - split runtime and development Python dependencies
