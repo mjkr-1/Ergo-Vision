@@ -13,7 +13,7 @@ mkdir -p "\$STATE"
 if /usr/sbin/lsof -tiTCP:"\$PORT" -sTCP:LISTEN >/dev/null 2>&1; then /usr/bin/open "http://127.0.0.1:\$PORT"; exit 0; fi
 cd "\$ROOT" || exit 1
 ERGOVISION_NO_AUTO_OPEN=1 /usr/bin/nohup /bin/bash scripts/run_mac.sh >>"\$LOGFILE" 2>&1 & RUN_PID=\$!; echo "\$RUN_PID" > "\$PIDFILE"
-for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do if /usr/sbin/lsof -tiTCP:"\$PORT" -sTCP:LISTEN >/dev/null 2>&1; then /usr/bin/open "http://127.0.0.1:\$PORT"; exit 0; fi; /bin/sleep .4; done
+for _ in $(seq 1 90); do if /usr/sbin/lsof -tiTCP:"\$PORT" -sTCP:LISTEN >/dev/null 2>&1; then /usr/bin/open "http://127.0.0.1:\$PORT"; exit 0; fi; /bin/sleep .4; done
 /usr/bin/osascript -e 'display dialog "ErgoVision could not start. Check ~/.ergovision/ergovision.log." buttons {"OK"} default button "OK" with icon caution' >/dev/null 2>&1 || true
 exit 1
 LAUNCHER

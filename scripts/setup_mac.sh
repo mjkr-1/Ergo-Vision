@@ -10,9 +10,14 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-  echo "Node.js and npm are required. Install Node.js 18+ and run this script again."
-  exit 1
+FRONTEND_DIST="$ROOT/frontend/dist/index.html"
+
+if [ ! -f "$FRONTEND_DIST" ]; then
+  if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    echo "This source checkout has no built frontend. Install Node.js 18+ and run this script again."
+    echo "GitHub release ZIPs include the built frontend and do not require Node.js."
+    exit 1
+  fi
 fi
 
 python3 - <<'PY'
@@ -29,11 +34,15 @@ source "$VENV/bin/activate"
 python -m pip install --upgrade pip
 python -m pip install -r "$ROOT/backend/requirements-dev.txt"
 
-(
-  cd "$ROOT/frontend"
-  npm ci
-  npm run build
-)
+if [ ! -f "$FRONTEND_DIST" ]; then
+  (
+    cd "$ROOT/frontend"
+    npm ci
+    npm run build
+  )
+else
+  echo "Using bundled frontend production build."
+fi
 
 mkdir -p "$MODELS"
 if ! (

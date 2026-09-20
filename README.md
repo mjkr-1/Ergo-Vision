@@ -24,7 +24,7 @@ ErgoVision uses OpenCV and MediaPipe to estimate ergonomic posture indicators fr
 - Runtime camera selection for built-in and external webcams
 - Head tilt, shoulder alignment, neck offset, forward-head, gaze and torso indicators
 - Calibrated slouch / hunch detection using shoulders, hips and relative pose depth
-- Personal neutral-posture calibration stored locally on the Mac
+- Personal neutral-posture calibration stored locally on the computer
 - 0–100 posture score with GOOD / WARNING / BAD states
 - Live annotated camera stream
 - Actionable posture feedback
@@ -33,13 +33,47 @@ ErgoVision uses OpenCV and MediaPipe to estimate ergonomic posture indicators fr
 - Local browser session-history summaries
 - Configurable movement-break and sustained-poor-posture reminders
 - Optional desktop notifications with explicit browser permission
-- Installable macOS `.app` launcher for everyday use
+- Installable macOS `.app` launcher and Windows Desktop/Start Menu shortcuts
 - Pause, resume and reset controls
 - Demo mode for development without a webcam
 - Automatic MediaPipe model provisioning
 - Single-server production mode after the frontend build
 - macOS setup, diagnostics and safe shutdown scripts
 - Backend tests and frontend build validation in GitHub Actions
+
+## Download and install
+
+ErgoVision supports **macOS and Windows**. Camera processing and posture inference stay on the local computer.
+
+### macOS
+
+The easiest route is the `ErgoVision-macOS.zip` asset from **GitHub Releases**. Extract it and double-click `install-mac.command`. ErgoVision installs under `~/Library/Application Support/ErgoVision` and creates `~/Applications/ErgoVision.app`.
+
+For a source checkout:
+
+```bash
+bash scripts/setup_mac.sh
+bash scripts/install_mac_app.sh
+```
+
+### Windows
+
+Download `ErgoVision-Windows.zip` from **GitHub Releases**, extract it, open PowerShell in that folder, and run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
+```
+
+The Windows installer copies ErgoVision to `%LOCALAPPDATA%\ErgoVision`, installs Python dependencies, creates Desktop and Start Menu shortcuts, and opens the local dashboard. Release ZIPs contain the built frontend and MediaPipe models, so Node.js is not required for a normal release install.
+
+Windows users need **Python 3.11 or 3.12** and camera access enabled under **Settings → Privacy & security → Camera**.
+
+See [Installation](docs/INSTALLATION.md) and [Windows](docs/WINDOWS.md) for full instructions.
+
+### Camera privacy
+
+The webcam activates when the first ErgoVision dashboard connects and is released when the final ErgoVision tab/window closes. The local backend can remain running without holding camera access.
+
 
 ## Quick start on macOS
 
