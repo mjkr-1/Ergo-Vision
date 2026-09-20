@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Measurements(BaseModel):
@@ -15,10 +15,21 @@ class Measurements(BaseModel):
     slouch_indicator: float
 
 
+class TrackingInfo(BaseModel):
+    confidence: float
+    quality: str
+    reliable: bool
+    head_visible: bool
+    shoulders_visible: bool
+    hips_visible: bool
+    guidance: list[str]
+
+
 class PostureCurrent(BaseModel):
     score: int
     status: str
     measurements: Measurements
+    tracking: TrackingInfo
     feedback: list[str]
     timestamp: str
     person_detected: bool
@@ -50,6 +61,24 @@ class CalibrationResponse(BaseModel):
     torso_depth_ratio: float
     forward_head_indicator: float
     samples: int
+
+
+class CameraDeviceResponse(BaseModel):
+    index: int
+    label: str
+    current: bool
+
+
+class CameraSelectRequest(BaseModel):
+    index: int = Field(ge=0, le=12)
+
+
+class CameraStatusResponse(BaseModel):
+    camera_index: int
+    is_opened: bool
+    current_fps: float
+    frame_width: int
+    frame_height: int
 
 
 class ConfigResponse(BaseModel):

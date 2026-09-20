@@ -565,3 +565,6 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+/* ErgoVision v4 tracking */
+.tracking-badge{padding:.28rem .65rem;border:1px solid var(--border);border-radius:999px;font-size:.7rem;font-weight:800}.tracking-badge.excellent{color:var(--good)}.tracking-badge.fair{color:var(--warning)}.tracking-badge.poor{color:#ffaaa6}.tracking-meter{height:7px;background:#060b14;border-radius:999px;overflow:hidden}.tracking-meter-fill{height:100%;background:linear-gradient(90deg,#ef625d,#f3b43f 55%,#2ecc71)}.setup-confidence,.setup-note{margin-top:.55rem;color:var(--muted);font-size:.78rem}.setup-checks{display:grid;grid-template-columns:repeat(3,1fr);gap:.45rem;margin-top:.85rem}.setup-checks span{padding:.5rem;text-align:center;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:.78rem}.setup-checks span.ready{color:var(--good)}.setup-guidance{margin:.85rem 0 0 1rem;color:#f6c96f;font-size:.8rem}.setup-good{margin-top:.8rem;color:var(--good);font-size:.8rem}.camera-select-label{display:flex;flex-direction:column;gap:.35rem;margin-top:.9rem;color:var(--muted);font-size:.76rem}.camera-select-label select{padding:.58rem;background:#101a2d;color:var(--text);border:1px solid var(--border);border-radius:8px}.camera-rescan{margin-top:.65rem}

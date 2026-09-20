@@ -19,6 +19,9 @@ ErgoVision uses OpenCV and MediaPipe to estimate ergonomic posture indicators fr
 
 - Local webcam processing with no cloud inference
 - Face and pose landmark analysis with MediaPipe Tasks
+- Tracking-confidence gating so weak landmarks do not produce false GOOD scores
+- Guided camera framing with head / shoulder / hip visibility checks
+- Runtime camera selection for built-in and external webcams
 - Head tilt, shoulder alignment, neck offset, forward-head, gaze and torso indicators
 - Calibrated slouch / hunch detection using shoulders, hips and relative pose depth
 - Personal neutral-posture calibration stored locally on the Mac
@@ -233,7 +236,7 @@ See [API reference](docs/API.md).
 
 ## Project status and roadmap
 
-The current version is a local desktop-style web application intended for single-user ergonomic feedback. It includes personal calibration, torso/slouch detection, live trend visualization and local session-history summaries. The current version includes personal calibration, torso/slouch detection, live trends, local session history, smart reminders and an installable macOS launcher. Camera selection, exports, accessibility and richer confidence modelling are the main next extensions.
+The current version is a local desktop-style web application intended for single-user ergonomic feedback. It includes personal calibration, torso/slouch detection, tracking-confidence gating, guided camera setup, camera selection, live trends, local session history, smart reminders and an installable macOS launcher. Exports, accessibility, signed releases and side-view analysis are the main next extensions.
 
 See [Roadmap](docs/ROADMAP.md).
 
