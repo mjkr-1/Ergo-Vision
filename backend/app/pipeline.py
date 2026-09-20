@@ -60,6 +60,42 @@ class PosturePipeline:
         self.tracker.stop()
         logger.info("Pipeline stopped")
 
+    def activate_camera(self) -> bool:
+        # Open the webcam and resume posture processing for an active dashboard.
+        if self._running and self.camera.is_opened:
+            return True
+
+        if not self.camera.is_opened and not self.camera.open():
+            logger.warning("Camera could not be opened for the dashboard")
+            return False
+
+        self.detector.reset_tracking()
+        self.smoother.reset()
+        self.classifier.reset()
+        self.start()
+        logger.info("Camera activated for dashboard client")
+        return True
+
+    def deactivate_camera(self) -> None:
+        # Stop posture processing and release the webcam when nobody is viewing.
+        if self._running:
+            self.stop()
+
+        self.camera.release()
+        self.detector.reset_tracking()
+        self.smoother.reset()
+        self.classifier.reset()
+
+        with self._lock:
+            self._current_frame_jpeg = None
+            self._current_status = "NO_PERSON"
+            self._current_score = 0
+            self._current_measurements = ErgonomicMeasurements(person_detected=False)
+            self._current_tracking = assess_tracking(None)
+            self._last_event = None
+
+        logger.info("Camera released because no dashboard clients remain")
+
     def _run_loop(self):
         while self._running:
             ok, frame = self.camera.read()

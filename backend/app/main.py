@@ -36,22 +36,16 @@ async def lifespan(app: FastAPI):
     pipeline = PosturePipeline(camera, detector)
     _active_pipeline = pipeline
 
-    camera_opened = camera.open()
     models_loaded = True if DEMO_MODE else detector.load_models()
 
-    if not camera_opened:
-        logger.warning("Camera unavailable. Running without live video input.")
     if not models_loaded:
         logger.warning("MediaPipe models are unavailable.")
-    if not camera_opened or not models_loaded:
-        logger.warning("Vision pipeline partially initialized.")
 
-    pipeline.start()
-    logger.info("ErgoVision started")
+    logger.info("ErgoVision backend started; camera will activate when the dashboard connects")
     yield
 
     if _active_pipeline:
-        _active_pipeline.stop()
+        _active_pipeline.deactivate_camera()
         _active_pipeline.detector.release()
         _active_pipeline = None
 
