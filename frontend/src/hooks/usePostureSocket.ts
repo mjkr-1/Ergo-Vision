@@ -9,18 +9,33 @@ export function usePostureSocket() {
 
   useEffect(() => {
     let disposed = false
+    let reconnectTimer: number | null = null
+
+    const cancelReconnect = () => {
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+    }
 
     const connect = () => {
       if (disposed) return
+
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
       const socket = new WebSocket(`${proto}://${window.location.host}/ws/posture`)
+      socketRef.current = socket
 
       socket.onopen = () => {
+        if (disposed) {
+          socket.close(1000, 'page inactive')
+          return
+        }
         reconnectDelay.current = 1000
         setConnected(true)
       }
 
       socket.onmessage = (event) => {
+        if (disposed) return
         try {
           const data: PostureEvent = JSON.parse(event.data)
           setPosture(data)
@@ -32,20 +47,48 @@ export function usePostureSocket() {
       socket.onclose = () => {
         setConnected(false)
         if (!disposed) {
-          setTimeout(connect, reconnectDelay.current)
+          reconnectTimer = window.setTimeout(connect, reconnectDelay.current)
           reconnectDelay.current = Math.min(reconnectDelay.current * 2, 5000)
         }
       }
 
       socket.onerror = () => socket.close()
-      socketRef.current = socket
     }
 
+    const leavePage = () => {
+      if (disposed) return
+      disposed = true
+      cancelReconnect()
+
+      const socket = socketRef.current
+      socketRef.current = null
+      if (socket) {
+        socket.onclose = null
+        try {
+          socket.close(1000, 'page closed')
+        } catch {
+          // Browser may already be tearing down the page.
+        }
+      }
+    }
+
+    const restorePage = (event: PageTransitionEvent) => {
+      if (!event.persisted || !disposed) return
+      disposed = false
+      reconnectDelay.current = 1000
+      connect()
+    }
+
+    window.addEventListener('pagehide', leavePage)
+    window.addEventListener('beforeunload', leavePage)
+    window.addEventListener('pageshow', restorePage)
     connect()
 
     return () => {
-      disposed = true
-      socketRef.current?.close()
+      leavePage()
+      window.removeEventListener('pagehide', leavePage)
+      window.removeEventListener('beforeunload', leavePage)
+      window.removeEventListener('pageshow', restorePage)
     }
   }, [])
 

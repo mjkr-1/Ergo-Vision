@@ -11,6 +11,8 @@ This roadmap is directional rather than a commitment to dates.
 - professional CI and contribution workflow
 - configurable reminders and break prompts
 - installable macOS app launcher
+- Windows local installer and shortcuts
+- automated macOS + Windows GitHub Release bundles
 
 ## Near term
 

@@ -56,10 +56,9 @@ cd "$ROOT/backend"
 python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT" &
 SERVER_PID=$!
 
-(
-  sleep 1.5
-  open "http://127.0.0.1:$PORT" >/dev/null 2>&1 || true
-) &
+if [ "${ERGOVISION_NO_AUTO_OPEN:-0}" != "1" ]; then
+  ( sleep 1.5; open "http://127.0.0.1:$PORT" >/dev/null 2>&1 || true ) &
+fi
 
 set +e
 wait "$SERVER_PID"

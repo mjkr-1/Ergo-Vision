@@ -7,6 +7,7 @@ import PostureScore from './components/PostureScore'
 import ReminderPanel from './components/ReminderPanel'
 import SessionHistory from './components/SessionHistory'
 import SessionPanel from './components/SessionPanel'
+import SetupGuide from './components/SetupGuide'
 import TrendChart from './components/TrendChart'
 import { usePostureSocket } from './hooks/usePostureSocket'
 import { api } from './services/api'
@@ -84,7 +85,8 @@ export default function App() {
           <Feedback posture={posture} />
         </section>
         <aside className="grid-side">
-          <CalibrationPanel />
+          <SetupGuide posture={posture} />
+          <CalibrationPanel posture={posture} />
           <Metrics posture={posture} config={config} />
           <SessionPanel />
           <ReminderPanel posture={posture} />

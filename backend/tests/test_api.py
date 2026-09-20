@@ -83,3 +83,21 @@ def test_websocket_posture_updates(client):
         assert "status" in data
         assert "measurements" in data
         assert 0 <= data["score"] <= 100
+
+
+def test_camera_releases_after_dashboard_disconnect(client):
+    import time
+    from app.main import get_pipeline
+
+    pipe = get_pipeline()
+    assert pipe is not None
+
+    with client.websocket_connect("/ws/posture") as ws:
+        ws.receive_json()
+        assert pipe.camera.is_opened is True
+
+    deadline = time.monotonic() + 1.5
+    while pipe.camera.is_opened and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+    assert pipe.camera.is_opened is False

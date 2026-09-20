@@ -156,6 +156,12 @@ class Detector:
         )
         return frame
 
+    def reset_tracking(self):
+        with self._landmark_lock:
+            self.last_landmarks = None
+            self._last_face = None
+            self._last_pose = None
+
     def release(self):
         if self.face_landmarker:
             self.face_landmarker.close()

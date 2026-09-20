@@ -1,10 +1,11 @@
 import logging
+import threading
 import time
 
 import cv2
 import numpy as np
 
-from ..config import CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT, TARGET_FPS, DEMO_MODE
+from ..config import CAMERA_INDEX, DEMO_MODE, FRAME_HEIGHT, FRAME_WIDTH, TARGET_FPS
 
 logger = logging.getLogger(__name__)
 
@@ -22,64 +23,96 @@ class Camera:
         self.fps_counter = 0
         self.fps_timer = time.time()
         self.current_fps = 0.0
+        self._lock = threading.RLock()
 
     def open(self) -> bool:
-        if DEMO_MODE:
-            logger.info("Demo mode: skipping camera open")
-            self.is_opened = True
-            return True
-        try:
-            self.cap = cv2.VideoCapture(self.camera_index)
-            if not self.cap.isOpened():
-                logger.warning("Cannot open camera %d", self.camera_index)
-                return False
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
-            self.cap.set(cv2.CAP_PROP_FPS, self.target_fps)
-            self.is_opened = True
-            logger.info("Camera %d opened", self.camera_index)
-            return True
-        except Exception as e:
-            logger.error("Camera open error: %s", e)
+        with self._lock:
+            if DEMO_MODE:
+                logger.info("Demo mode: skipping camera open")
+                self.is_opened = True
+                return True
+            return self._open_index(self.camera_index)
+
+    def _open_index(self, index: int) -> bool:
+        cap = cv2.VideoCapture(index)
+        if not cap.isOpened():
+            cap.release()
+            logger.warning("Cannot open camera %d", index)
             return False
 
-    def read(self) -> tuple[bool, np.ndarray | None]:
-        if not self.is_opened:
-            return False, None
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+        cap.set(cv2.CAP_PROP_FPS, self.target_fps)
+        self.cap = cap
+        self.camera_index = index
+        self.is_opened = True
+        self.last_frame_time = 0.0
+        self.current_fps = 0.0
+        logger.info("Camera %d opened", index)
+        return True
 
-        now = time.time()
-        if now - self.last_frame_time < self.frame_interval:
-            return False, None
+    def select(self, index: int) -> bool:
+        if index < 0 or index > 12:
+            return False
+        with self._lock:
+            if DEMO_MODE:
+                self.camera_index = index
+                return True
+            old_index = self.camera_index
+            if index == old_index and self.is_opened:
+                return True
+            if self.cap is not None:
+                self.cap.release()
+            self.cap = None
+            self.is_opened = False
+            if self._open_index(index):
+                return True
+            logger.warning("Camera %d unavailable; restoring camera %d", index, old_index)
+            self._open_index(old_index)
+            return False
 
+    def scan(self, max_index: int = 5) -> list[int]:
         if DEMO_MODE:
-            frame = self._generate_demo_frame()
+            return [self.camera_index]
+        found: list[int] = []
+        with self._lock:
+            for index in range(max_index):
+                if index == self.camera_index and self.is_opened:
+                    found.append(index)
+                    continue
+                cap = cv2.VideoCapture(index)
+                try:
+                    if cap.isOpened():
+                        found.append(index)
+                finally:
+                    cap.release()
+        return found
+
+    def read(self) -> tuple[bool, np.ndarray | None]:
+        with self._lock:
+            if not self.is_opened:
+                return False, None
+            now = time.time()
+            if now - self.last_frame_time < self.frame_interval:
+                return False, None
+            if DEMO_MODE:
+                frame = self._generate_demo_frame()
+                self.last_frame_time = now
+                self._update_fps()
+                return True, frame
+            if self.cap is None:
+                return False, None
+            ret, frame = self.cap.read()
+            if not ret or frame is None:
+                return False, None
             self.last_frame_time = now
             self._update_fps()
             return True, frame
 
-        if self.cap is None:
-            return False, None
-
-        ret, frame = self.cap.read()
-        if not ret or frame is None:
-            return False, None
-
-        self.last_frame_time = now
-        self._update_fps()
-        return True, frame
-
     def _generate_demo_frame(self) -> np.ndarray:
         frame = np.zeros((self.frame_height, self.frame_width, 3), dtype=np.uint8)
         frame[:] = (40, 40, 40)
-        cv2.putText(
-            frame,
-            "DEMO MODE",
-            (self.frame_width // 2 - 100, self.frame_height // 2),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            (200, 200, 200),
-            2,
-        )
+        cv2.putText(frame, "DEMO MODE", (self.frame_width // 2 - 100, self.frame_height // 2), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (200, 200, 200), 2)
         return frame
 
     def _update_fps(self):
@@ -91,10 +124,11 @@ class Camera:
             self.fps_timer = now
 
     def release(self):
-        if self.cap is not None:
-            self.cap.release()
-            self.cap = None
-        self.is_opened = False
+        with self._lock:
+            if self.cap is not None:
+                self.cap.release()
+                self.cap = None
+            self.is_opened = False
 
     def get_status(self) -> dict:
         return {

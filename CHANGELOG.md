@@ -8,6 +8,13 @@ The project follows the spirit of Keep a Changelog and uses semantic versioning 
 
 ### Added
 
+- Windows 10/11 setup, run, stop and diagnostics scripts
+- Windows Desktop and Start Menu shortcut installer
+- cross-platform installation guide
+- GitHub Release workflow producing macOS and Windows download ZIPs
+- Windows compatibility checks in GitHub Actions
+- release installers that place application files outside protected Desktop/Downloads folders
+
 - configurable movement-break reminders
 - sustained poor-posture notifications with cooldowns
 - optional browser/macOS desktop notifications

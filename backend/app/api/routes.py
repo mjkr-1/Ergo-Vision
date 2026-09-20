@@ -7,6 +7,9 @@ import app.config as config
 from ..pipeline import PosturePipeline
 from .schemas import (
     CalibrationResponse,
+    CameraDeviceResponse,
+    CameraSelectRequest,
+    CameraStatusResponse,
     ConfigResponse,
     HealthResponse,
     PostureCurrent,
@@ -93,6 +96,18 @@ def calibration_capture():
 @router.delete("/api/calibration", response_model=CalibrationResponse)
 def calibration_clear():
     return CalibrationResponse(**_require_pipeline().clear_calibration())
+
+
+@router.get("/api/camera/devices", response_model=list[CameraDeviceResponse])
+def camera_devices():
+    return [CameraDeviceResponse(**item) for item in _require_pipeline().camera_devices()]
+
+@router.post("/api/camera/select", response_model=CameraStatusResponse)
+def camera_select(request: CameraSelectRequest):
+    try:
+        return CameraStatusResponse(**_require_pipeline().select_camera(request.index))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/api/config", response_model=ConfigResponse)

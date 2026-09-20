@@ -17,6 +17,7 @@ from .ergonomics.smoothing import SmoothingBuffer
 from .session.tracker import SessionTracker
 from .vision.camera import Camera
 from .vision.detector import Detector
+from .vision.quality import assess_tracking
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class PosturePipeline:
         self._lock = threading.Lock()
         self._last_update_time = 0.0
         self._current_measurements = ErgonomicMeasurements(person_detected=False)
+        self._current_tracking = assess_tracking(None)
         self._current_status = "NO_PERSON"
         self._current_score = 0
         self._current_frame_jpeg: bytes | None = None
@@ -58,6 +60,42 @@ class PosturePipeline:
         self.tracker.stop()
         logger.info("Pipeline stopped")
 
+    def activate_camera(self) -> bool:
+        # Open the webcam and resume posture processing for an active dashboard.
+        if self._running and self.camera.is_opened:
+            return True
+
+        if not self.camera.is_opened and not self.camera.open():
+            logger.warning("Camera could not be opened for the dashboard")
+            return False
+
+        self.detector.reset_tracking()
+        self.smoother.reset()
+        self.classifier.reset()
+        self.start()
+        logger.info("Camera activated for dashboard client")
+        return True
+
+    def deactivate_camera(self) -> None:
+        # Stop posture processing and release the webcam when nobody is viewing.
+        if self._running:
+            self.stop()
+
+        self.camera.release()
+        self.detector.reset_tracking()
+        self.smoother.reset()
+        self.classifier.reset()
+
+        with self._lock:
+            self._current_frame_jpeg = None
+            self._current_status = "NO_PERSON"
+            self._current_score = 0
+            self._current_measurements = ErgonomicMeasurements(person_detected=False)
+            self._current_tracking = assess_tracking(None)
+            self._last_event = None
+
+        logger.info("Camera released because no dashboard clients remain")
+
     def _run_loop(self):
         while self._running:
             ok, frame = self.camera.read()
@@ -66,37 +104,44 @@ class PosturePipeline:
                 continue
 
             landmarks, annotated = self.detector.process_frame(frame)
+            tracking = assess_tracking(landmarks)
             measurements = compute_measurements(landmarks)
             smoothed = self.smoother.smooth(measurements)
-            if smoothed.person_detected:
+            if tracking.quality == "EXCELLENT" and tracking.hips_visible and smoothed.person_detected:
                 self._recent_measurements.append(smoothed)
             smoothed.slouch_indicator = self.calibration.slouch_indicator(smoothed)
 
-            status = self.classifier.classify(smoothed)
-            score, _breakdown = compute_score(smoothed)
+            if not tracking.reliable:
+                status = "LOW_CONFIDENCE"
+                score = 0
+            else:
+                status = self.classifier.classify(smoothed)
+                score, _breakdown = compute_score(smoothed)
             encoded, jpeg = cv2.imencode(".jpg", annotated)
 
             with self._lock:
                 self._current_measurements = smoothed
+                self._current_tracking = tracking
                 self._current_status = status
                 self._current_score = score
                 if encoded:
                     self._current_frame_jpeg = jpeg.tobytes()
 
-            self.tracker.update(status, score)
-            self._maybe_emit(status, smoothed, score)
+            tracker_status = "NO_PERSON" if status == "LOW_CONFIDENCE" else status
+            self.tracker.update(tracker_status, score)
+            self._maybe_emit(status, smoothed, score, tracking)
 
-    def _maybe_emit(self, status, measurements, score):
+    def _maybe_emit(self, status, measurements, score, tracking):
         now = time.time()
         if now - self._last_update_time < WEBSOCKET_UPDATE_INTERVAL:
             return
         self._last_update_time = now
-        event = self._build_event(status, measurements, score)
+        event = self._build_event(status, measurements, score, tracking)
         with self._lock:
             self._last_event = event
 
-    def _build_event(self, status, measurements, score) -> dict:
-        feedback = self.feedback_engine.generate(measurements, status)
+    def _build_event(self, status, measurements, score, tracking) -> dict:
+        feedback = (tracking.guidance or ["Tracking quality is too low for a reliable posture assessment."]) if status == "LOW_CONFIDENCE" else self.feedback_engine.generate(measurements, status)
         return {
             "score": score,
             "status": status,
@@ -113,6 +158,7 @@ class PosturePipeline:
                 "torso_depth_ratio": round(measurements.torso_depth_ratio, 3),
                 "slouch_indicator": round(measurements.slouch_indicator, 3),
             },
+            "tracking": tracking.as_dict(),
             "feedback": feedback,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "person_detected": measurements.person_detected,
@@ -121,9 +167,10 @@ class PosturePipeline:
     def get_current(self) -> dict:
         with self._lock:
             measurements = self._current_measurements
+            tracking = self._current_tracking
             status = self._current_status
             score = self._current_score
-        return self._build_event(status, measurements, score)
+        return self._build_event(status, measurements, score, tracking)
 
     def get_last_event(self) -> Optional[dict]:
         with self._lock:
@@ -149,3 +196,13 @@ class PosturePipeline:
 
     def get_calibration(self) -> dict:
         return self.calibration.as_dict()
+
+    def camera_devices(self) -> list[dict]:
+        current = self.camera.camera_index
+        return [{"index": i, "label": f"Camera {i+1}", "current": i == current} for i in self.camera.scan()]
+
+    def select_camera(self, index: int) -> dict:
+        if not self.camera.select(index):
+            raise ValueError(f"Camera {index+1} could not be opened.")
+        self.detector.reset_tracking(); self.smoother.reset(); self.classifier.reset(); self._recent_measurements.clear(); self.calibration.clear()
+        return self.camera.get_status()
