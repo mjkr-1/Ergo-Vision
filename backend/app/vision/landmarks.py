@@ -14,6 +14,7 @@ class Landmark2D:
 @dataclass
 class LandmarkSet:
     """Abstraction over MediaPipe landmarks."""
+
     landmarks: dict[str, Landmark2D]
 
     def get(self, name: str) -> Optional[Landmark2D]:
@@ -37,9 +38,17 @@ FACE_LANDMARK_NAMES = {
     "nose_bridge": 6,
     "left_eye_inner": 133,
     "left_eye_outer": 33,
+    "left_eye_upper_outer": 160,
+    "left_eye_upper_inner": 158,
+    "left_eye_lower_inner": 153,
+    "left_eye_lower_outer": 144,
     "left_eye_center": 159,
     "right_eye_inner": 362,
     "right_eye_outer": 263,
+    "right_eye_upper_inner": 385,
+    "right_eye_upper_outer": 387,
+    "right_eye_lower_outer": 373,
+    "right_eye_lower_inner": 380,
     "right_eye_center": 386,
     "left_ear": 234,
     "right_ear": 454,

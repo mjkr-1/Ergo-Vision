@@ -22,14 +22,68 @@ class TrackingInfo(BaseModel):
     head_visible: bool
     shoulders_visible: bool
     hips_visible: bool
+    eyes_visible: bool
+    head_confidence: float
+    shoulder_confidence: float
+    torso_confidence: float
+    eye_confidence: float
     guidance: list[str]
+
+
+class OcularInfo(BaseModel):
+    available: bool
+    calibrated: bool
+    confidence: float
+    ear: float
+    baseline_ear: float
+    blink_threshold: float
+    blink_count: int
+    blink_rate_per_min: float
+    inter_blink_interval_seconds: float
+    observation_seconds: float
+    visual_load: float
+    proximity_drift: float
+
+
+class ExposureInfo(BaseModel):
+    instantaneous_risk: float
+    confidence_weighted_risk: float
+    cumulative_dose: float
+    dose_level: str
+    continuous_poor_seconds: float
+    postural_drift: float
+    baseline_risk: float
+    recent_risk: float
+    available: bool
+
+
+class InterventionInfo(BaseModel):
+    state: str
+    active: bool
+    trigger_seconds: float
+    recovery_required_seconds: float
+    pending_seconds: float
+    verification_seconds: float
+    correction_seconds: float
+    risk_before: float
+    risk_after: float
+    improvement_percent: float
+    total_interventions: int
+    successful_corrections: int
+    correction_rate_percent: float
 
 
 class PostureCurrent(BaseModel):
     score: int
+    ergovision_index: int
+    combined_risk: float
+    proximity_drift: float
     status: str
     measurements: Measurements
     tracking: TrackingInfo
+    ocular: OcularInfo
+    exposure: ExposureInfo
+    intervention: InterventionInfo
     feedback: list[str]
     timestamp: str
     person_detected: bool
@@ -51,6 +105,15 @@ class SessionStatsResponse(BaseModel):
     current_score: int
     longest_poor_posture_seconds: float
     active: bool
+    exposure_dose: float
+    exposure_level: str
+    postural_drift: float
+    blink_rate_per_min: float
+    intervention_count: int
+    successful_corrections: int
+    correction_rate_percent: float
+    last_correction_seconds: float
+    last_improvement_percent: float
 
 
 class CalibrationResponse(BaseModel):

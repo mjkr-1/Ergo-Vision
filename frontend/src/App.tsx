@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import CalibrationPanel from './components/CalibrationPanel'
 import CameraFeed from './components/CameraFeed'
+import CorrectionOverlay from './components/CorrectionOverlay'
+import ExposurePanel from './components/ExposurePanel'
 import Feedback from './components/Feedback'
 import Metrics from './components/Metrics'
+import OcularPanel from './components/OcularPanel'
 import PostureScore from './components/PostureScore'
 import ReminderPanel from './components/ReminderPanel'
 import SessionHistory from './components/SessionHistory'
@@ -12,6 +15,7 @@ import TrendChart from './components/TrendChart'
 import { usePostureSocket } from './hooks/usePostureSocket'
 import { api } from './services/api'
 import type { AppConfig, HealthStatus } from './types'
+import './hackathon.css'
 
 export default function App() {
   const { posture, connected } = usePostureSocket()
@@ -48,60 +52,62 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="header">
+      <header className="header hackathon-header">
         <div>
           <h1 className="title">ErgoVision</h1>
-          <p className="subtitle">Private, calibrated posture monitoring while you work</p>
+          <p className="subtitle">Personalized · confidence-aware · temporal screen ergonomics</p>
         </div>
         <div className="header-badges">
+          <span className="badge local">LOCAL AI</span>
           {health?.demo_mode && <span className="badge demo">DEMO</span>}
-          {connected ? (
-            <span className="badge live">LIVE</span>
-          ) : (
-            <span className="badge offline">OFFLINE</span>
-          )}
+          {connected ? <span className="badge live">LIVE</span> : <span className="badge offline">OFFLINE</span>}
         </div>
       </header>
 
       {!backendReachable && (
-        <div className="system-banner error">
-          The ErgoVision backend is not reachable. Start the local server and refresh this page.
-        </div>
+        <div className="system-banner error">The ErgoVision backend is not reachable. Start the local server and refresh this page.</div>
       )}
 
       {setupProblem && (
         <div className="system-banner warning">
           {!health.camera_available && <span>Camera unavailable. </span>}
           {!health.model_loaded && <span>MediaPipe models unavailable. </span>}
-          Check Terminal camera permission and run the Mac setup script again.
+          Check camera permissions and the local setup.
         </div>
       )}
 
       <main className="grid">
         <section className="grid-main">
           <PostureScore posture={posture} connected={connected} />
+          <div className="insight-pair">
+            <ExposurePanel posture={posture} />
+            <OcularPanel posture={posture} />
+          </div>
           <CameraFeed />
           <TrendChart posture={posture} />
           <Feedback posture={posture} />
         </section>
+
         <aside className="grid-side">
           <SetupGuide posture={posture} />
           <CalibrationPanel posture={posture} />
           <Metrics posture={posture} config={config} />
           <SessionPanel />
-          <ReminderPanel posture={posture} />
+          <ReminderPanel />
           <SessionHistory />
           <div className="card privacy-card">
-            <div className="card-title">Privacy</div>
-            <p>Video processing stays on this computer. Camera frames are not stored or uploaded. Calibration is stored locally on this Mac; session history stays in this browser.</p>
+            <div className="card-title">Privacy by design</div>
+            <p>Inference runs on this computer. Raw camera footage is not uploaded or persistently recorded. Calibration and summaries stay local.</p>
           </div>
         </aside>
       </main>
 
       <footer className="footer">
-        <span>ErgoVision · privacy-first posture monitoring</span>
+        <span>ErgoVision · personalized temporal ergonomic coaching</span>
         <span className="muted">Ergonomic guidance only · not a medical device</span>
       </footer>
+
+      <CorrectionOverlay posture={posture} />
     </div>
   )
 }

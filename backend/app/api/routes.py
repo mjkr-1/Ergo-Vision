@@ -59,24 +59,17 @@ def session_stats():
 
 @router.post("/api/session/start", response_model=SessionStatsResponse)
 def session_start():
-    pipe = _require_pipeline()
-    pipe.tracker.start()
-    return SessionStatsResponse(**pipe.get_session_stats())
+    return SessionStatsResponse(**_require_pipeline().start_session())
 
 
 @router.post("/api/session/stop", response_model=SessionStatsResponse)
 def session_stop():
-    pipe = _require_pipeline()
-    pipe.tracker.stop()
-    return SessionStatsResponse(**pipe.get_session_stats())
+    return SessionStatsResponse(**_require_pipeline().stop_session())
 
 
 @router.post("/api/session/reset", response_model=SessionStatsResponse)
 def session_reset():
-    pipe = _require_pipeline()
-    pipe.tracker.reset()
-    pipe.tracker.start()
-    return SessionStatsResponse(**pipe.get_session_stats())
+    return SessionStatsResponse(**_require_pipeline().reset_session())
 
 
 @router.get("/api/calibration", response_model=CalibrationResponse)
@@ -101,6 +94,7 @@ def calibration_clear():
 @router.get("/api/camera/devices", response_model=list[CameraDeviceResponse])
 def camera_devices():
     return [CameraDeviceResponse(**item) for item in _require_pipeline().camera_devices()]
+
 
 @router.post("/api/camera/select", response_model=CameraStatusResponse)
 def camera_select(request: CameraSelectRequest):

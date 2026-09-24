@@ -10,8 +10,11 @@ import cv2
 from .config import WEBSOCKET_UPDATE_INTERVAL
 from .ergonomics.calibration import CalibrationProfile
 from .ergonomics.classifier import PostureClassifier
+from .ergonomics.exposure import ExposureEngine
 from .ergonomics.feedback import FeedbackEngine
+from .ergonomics.intervention import InterventionEngine
 from .ergonomics.measurements import ErgonomicMeasurements, compute_measurements
+from .ergonomics.ocular import OcularEngine
 from .ergonomics.scoring import compute_score
 from .ergonomics.smoothing import SmoothingBuffer
 from .session.tracker import SessionTracker
@@ -31,14 +34,25 @@ class PosturePipeline:
         self.smoother = SmoothingBuffer()
         self.tracker = SessionTracker()
         self.calibration = CalibrationProfile.load()
+        self.ocular_engine = OcularEngine()
+        self.exposure_engine = ExposureEngine()
+        self.intervention_engine = InterventionEngine()
+
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self._last_update_time = 0.0
+
         self._current_measurements = ErgonomicMeasurements(person_detected=False)
         self._current_tracking = assess_tracking(None)
+        self._current_ocular = self.ocular_engine.current()
+        self._current_exposure = self.exposure_engine.current()
+        self._current_intervention = self.intervention_engine.current()
         self._current_status = "NO_PERSON"
         self._current_score = 0
+        self._current_ergovision_index = 0
+        self._current_combined_risk = 0.0
+        self._current_proximity_drift = 0.0
         self._current_frame_jpeg: bytes | None = None
         self._last_event: dict | None = None
         self._recent_measurements: deque[ErgonomicMeasurements] = deque(maxlen=90)
@@ -58,10 +72,10 @@ class PosturePipeline:
             self._thread.join(timeout=2.0)
             self._thread = None
         self.tracker.stop()
+        self.intervention_engine.pause()
         logger.info("Pipeline stopped")
 
     def activate_camera(self) -> bool:
-        # Open the webcam and resume posture processing for an active dashboard.
         if self._running and self.camera.is_opened:
             return True
 
@@ -77,7 +91,6 @@ class PosturePipeline:
         return True
 
     def deactivate_camera(self) -> None:
-        # Stop posture processing and release the webcam when nobody is viewing.
         if self._running:
             self.stop()
 
@@ -90,8 +103,14 @@ class PosturePipeline:
             self._current_frame_jpeg = None
             self._current_status = "NO_PERSON"
             self._current_score = 0
+            self._current_ergovision_index = 0
+            self._current_combined_risk = 0.0
+            self._current_proximity_drift = 0.0
             self._current_measurements = ErgonomicMeasurements(person_detected=False)
             self._current_tracking = assess_tracking(None)
+            self._current_ocular = self.ocular_engine.current()
+            self._current_exposure = self.exposure_engine.current()
+            self._current_intervention = self.intervention_engine.current()
             self._last_event = None
 
         logger.info("Camera released because no dashboard clients remain")
@@ -103,12 +122,15 @@ class PosturePipeline:
                 time.sleep(0.005)
                 continue
 
+            now = time.monotonic()
             landmarks, annotated = self.detector.process_frame(frame)
             tracking = assess_tracking(landmarks)
             measurements = compute_measurements(landmarks)
             smoothed = self.smoother.smooth(measurements)
+
             if tracking.quality == "EXCELLENT" and tracking.hips_visible and smoothed.person_detected:
                 self._recent_measurements.append(smoothed)
+
             smoothed.slouch_indicator = self.calibration.slouch_indicator(smoothed)
 
             if not tracking.reliable:
@@ -117,33 +139,108 @@ class PosturePipeline:
             else:
                 status = self.classifier.classify(smoothed)
                 score, _breakdown = compute_score(smoothed)
+
+            proximity_drift = self._proximity_drift(smoothed)
+            ocular = self.ocular_engine.update(
+                landmarks=landmarks,
+                eye_confidence=tracking.eye_confidence,
+                proximity_drift=proximity_drift,
+                timestamp=now,
+            )
+
+            posture_risk = (1.0 - score / 100.0) if tracking.reliable else 0.0
+            if ocular.available:
+                combined_risk = 0.75 * posture_risk + 0.25 * ocular.visual_load
+                combined_confidence = 0.75 * tracking.confidence + 0.25 * ocular.confidence
+            else:
+                combined_risk = posture_risk
+                combined_confidence = tracking.confidence
+
+            combined_risk = max(0.0, min(1.0, combined_risk))
+            combined_confidence = max(0.0, min(1.0, combined_confidence))
+            ergovision_index = int(round((1.0 - combined_risk) * 100.0)) if tracking.reliable else 0
+
+            if self.tracker.active:
+                exposure = self.exposure_engine.update(
+                    risk=combined_risk,
+                    confidence=combined_confidence,
+                    reliable=tracking.reliable,
+                    timestamp=now,
+                )
+                intervention = self.intervention_engine.update(
+                    risk=combined_risk,
+                    posture_status=status,
+                    reliable=tracking.reliable,
+                    timestamp=now,
+                )
+            else:
+                exposure = self.exposure_engine.update(
+                    risk=combined_risk,
+                    confidence=combined_confidence,
+                    reliable=False,
+                    timestamp=now,
+                )
+                self.intervention_engine.pause()
+                intervention = self.intervention_engine.current()
+
             encoded, jpeg = cv2.imencode(".jpg", annotated)
 
             with self._lock:
                 self._current_measurements = smoothed
                 self._current_tracking = tracking
+                self._current_ocular = ocular
+                self._current_exposure = exposure
+                self._current_intervention = intervention
                 self._current_status = status
                 self._current_score = score
+                self._current_ergovision_index = ergovision_index
+                self._current_combined_risk = combined_risk
+                self._current_proximity_drift = proximity_drift
                 if encoded:
                     self._current_frame_jpeg = jpeg.tobytes()
 
             tracker_status = "NO_PERSON" if status == "LOW_CONFIDENCE" else status
             self.tracker.update(tracker_status, score)
-            self._maybe_emit(status, smoothed, score, tracking)
+            self._maybe_emit()
 
-    def _maybe_emit(self, status, measurements, score, tracking):
+    def _proximity_drift(self, measurements: ErgonomicMeasurements) -> float:
+        if not self.calibration.calibrated:
+            return 0.0
+        baseline = self.calibration.forward_head_indicator
+        return max(-1.0, min(1.0, measurements.forward_head_indicator - baseline))
+
+    def _maybe_emit(self):
         now = time.time()
         if now - self._last_update_time < WEBSOCKET_UPDATE_INTERVAL:
             return
         self._last_update_time = now
-        event = self._build_event(status, measurements, score, tracking)
+        event = self.get_current()
         with self._lock:
             self._last_event = event
 
-    def _build_event(self, status, measurements, score, tracking) -> dict:
-        feedback = (tracking.guidance or ["Tracking quality is too low for a reliable posture assessment."]) if status == "LOW_CONFIDENCE" else self.feedback_engine.generate(measurements, status)
+    def _build_event(
+        self,
+        status,
+        measurements,
+        score,
+        ergovision_index,
+        combined_risk,
+        proximity_drift,
+        tracking,
+        ocular,
+        exposure,
+        intervention,
+    ) -> dict:
+        feedback = (
+            tracking.guidance or ["Tracking quality is too low for a reliable posture assessment."]
+            if status == "LOW_CONFIDENCE"
+            else self.feedback_engine.generate(measurements, status)
+        )
         return {
             "score": score,
+            "ergovision_index": ergovision_index,
+            "combined_risk": round(combined_risk, 4),
+            "proximity_drift": round(proximity_drift, 4),
             "status": status,
             "measurements": {
                 "head_tilt_degrees": round(measurements.head_tilt_degrees, 1),
@@ -159,6 +256,9 @@ class PosturePipeline:
                 "slouch_indicator": round(measurements.slouch_indicator, 3),
             },
             "tracking": tracking.as_dict(),
+            "ocular": ocular.as_dict(),
+            "exposure": exposure.as_dict(),
+            "intervention": intervention.as_dict(),
             "feedback": feedback,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "person_detected": measurements.person_detected,
@@ -168,9 +268,26 @@ class PosturePipeline:
         with self._lock:
             measurements = self._current_measurements
             tracking = self._current_tracking
+            ocular = self._current_ocular
+            exposure = self._current_exposure
+            intervention = self._current_intervention
             status = self._current_status
             score = self._current_score
-        return self._build_event(status, measurements, score, tracking)
+            ergovision_index = self._current_ergovision_index
+            combined_risk = self._current_combined_risk
+            proximity_drift = self._current_proximity_drift
+        return self._build_event(
+            status,
+            measurements,
+            score,
+            ergovision_index,
+            combined_risk,
+            proximity_drift,
+            tracking,
+            ocular,
+            exposure,
+            intervention,
+        )
 
     def get_last_event(self) -> Optional[dict]:
         with self._lock:
@@ -181,17 +298,55 @@ class PosturePipeline:
             return self._current_frame_jpeg
 
     def get_session_stats(self) -> dict:
-        return self.tracker.get_stats().__dict__
+        stats = self.tracker.get_stats().__dict__.copy()
+        exposure = self.exposure_engine.current()
+        ocular = self.ocular_engine.current()
+        intervention = self.intervention_engine.current()
+        stats.update(
+            {
+                "exposure_dose": exposure.cumulative_dose,
+                "exposure_level": exposure.dose_level,
+                "postural_drift": exposure.postural_drift,
+                "blink_rate_per_min": ocular.blink_rate_per_min,
+                "intervention_count": intervention.total_interventions,
+                "successful_corrections": intervention.successful_corrections,
+                "correction_rate_percent": intervention.correction_rate_percent,
+                "last_correction_seconds": intervention.correction_seconds,
+                "last_improvement_percent": intervention.improvement_percent,
+            }
+        )
+        return stats
+
+    def start_session(self) -> dict:
+        self.tracker.start()
+        return self.get_session_stats()
+
+    def stop_session(self) -> dict:
+        self.tracker.stop()
+        self.intervention_engine.pause()
+        return self.get_session_stats()
+
+    def reset_session(self) -> dict:
+        self.tracker.reset()
+        self.exposure_engine.reset()
+        self.intervention_engine.reset()
+        self.ocular_engine.reset()
+        self.tracker.start()
+        return self.get_session_stats()
 
     def capture_calibration(self) -> dict:
         samples = list(self._recent_measurements)[-60:]
         self.calibration.capture(samples)
         self.classifier.reset()
+        self.exposure_engine.reset()
+        self.intervention_engine.reset()
         return self.calibration.as_dict()
 
     def clear_calibration(self) -> dict:
         self.calibration.clear()
         self.classifier.reset()
+        self.exposure_engine.reset()
+        self.intervention_engine.reset()
         return self.calibration.as_dict()
 
     def get_calibration(self) -> dict:
@@ -199,10 +354,17 @@ class PosturePipeline:
 
     def camera_devices(self) -> list[dict]:
         current = self.camera.camera_index
-        return [{"index": i, "label": f"Camera {i+1}", "current": i == current} for i in self.camera.scan()]
+        return [{"index": i, "label": f"Camera {i + 1}", "current": i == current} for i in self.camera.scan()]
 
     def select_camera(self, index: int) -> dict:
         if not self.camera.select(index):
-            raise ValueError(f"Camera {index+1} could not be opened.")
-        self.detector.reset_tracking(); self.smoother.reset(); self.classifier.reset(); self._recent_measurements.clear(); self.calibration.clear()
+            raise ValueError(f"Camera {index + 1} could not be opened.")
+        self.detector.reset_tracking()
+        self.smoother.reset()
+        self.classifier.reset()
+        self._recent_measurements.clear()
+        self.calibration.clear()
+        self.ocular_engine.reset()
+        self.exposure_engine.reset()
+        self.intervention_engine.reset()
         return self.camera.get_status()
