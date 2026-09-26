@@ -17,6 +17,7 @@ from .ergonomics.measurements import ErgonomicMeasurements, compute_measurements
 from .ergonomics.ocular import OcularEngine
 from .ergonomics.scoring import compute_score
 from .ergonomics.smoothing import SmoothingBuffer
+from .notifications import send_desktop_notification
 from .session.tracker import SessionTracker
 from .vision.camera import Camera
 from .vision.detector import Detector
@@ -56,6 +57,32 @@ class PosturePipeline:
         self._current_frame_jpeg: bytes | None = None
         self._last_event: dict | None = None
         self._recent_measurements: deque[ErgonomicMeasurements] = deque(maxlen=90)
+
+        self._background_monitoring = False
+        self._last_native_alert_at = 0.0
+        self._last_intervention_state = "NORMAL"
+
+    @property
+    def background_monitoring(self) -> bool:
+        return self._background_monitoring
+
+    def enable_background_monitoring(self) -> dict:
+        self.tracker.start()
+        camera_active = self.activate_camera()
+        self._background_monitoring = bool(camera_active)
+        return {
+            "enabled": self._background_monitoring,
+            "camera_active": self.camera.is_opened,
+        }
+
+    def disable_background_monitoring(self) -> dict:
+        self._background_monitoring = False
+        self._last_native_alert_at = 0.0
+        self._last_intervention_state = "NORMAL"
+        return {
+            "enabled": False,
+            "camera_active": self.camera.is_opened,
+        }
 
     def start(self):
         if self._running:
@@ -207,7 +234,42 @@ class PosturePipeline:
 
             tracker_status = "NO_PERSON" if status == "LOW_CONFIDENCE" else status
             self.tracker.update(tracker_status, score)
+            self._maybe_notify_native(intervention)
             self._maybe_emit()
+
+    def _maybe_notify_native(self, intervention) -> None:
+        if not self._background_monitoring:
+            self._last_intervention_state = intervention.state
+            return
+
+        now = time.monotonic()
+        state = intervention.state
+
+        if state in ("ALERTING", "VERIFYING"):
+            just_started = self._last_intervention_state not in ("ALERTING", "VERIFYING")
+            repeat_due = now - self._last_native_alert_at >= 12.0
+
+            if just_started or repeat_due:
+                event = self.get_current()
+                feedback = event.get("feedback") or []
+                body = (
+                    feedback[0]
+                    if feedback
+                    else "Return to your calibrated upright posture."
+                )
+                send_desktop_notification(
+                    "ErgoVision · posture correction",
+                    body,
+                )
+                self._last_native_alert_at = now
+
+        elif state == "CORRECTED" and self._last_intervention_state != "CORRECTED":
+            send_desktop_notification(
+                "ErgoVision · posture corrected",
+                "Good correction. Your posture has returned to the calibrated range.",
+            )
+
+        self._last_intervention_state = state
 
     def _proximity_drift(self, measurements: ErgonomicMeasurements) -> float:
         if not self.calibration.calibrated:

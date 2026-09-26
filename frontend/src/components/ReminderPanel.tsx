@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { api } from '../services/api'
 
 interface ReminderSettings {
   movementBreaks: boolean
@@ -26,8 +27,16 @@ export default function ReminderPanel() {
   const [settings, setSettings] = useState<ReminderSettings>(loadSettings)
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() => 'Notification' in window ? Notification.permission : 'unsupported')
   const [nextBreakSeconds, setNextBreakSeconds] = useState(settings.breakMinutes * 60)
+  const [backgroundMonitoring, setBackgroundMonitoring] = useState(false)
+  const [backgroundBusy, setBackgroundBusy] = useState(false)
   const settingsRef = useRef(settings)
   const lastBreakAt = useRef(Date.now())
+
+  useEffect(() => {
+    api.backgroundStatus()
+      .then((status) => setBackgroundMonitoring(status.enabled))
+      .catch(() => setBackgroundMonitoring(false))
+  }, [])
 
   useEffect(() => {
     settingsRef.current = settings
@@ -60,6 +69,18 @@ export default function ReminderPanel() {
     setPermission(result)
   }
 
+  const toggleBackgroundMonitoring = async () => {
+    setBackgroundBusy(true)
+    try {
+      const result = backgroundMonitoring
+        ? await api.backgroundStop()
+        : await api.backgroundStart()
+      setBackgroundMonitoring(result.enabled)
+    } finally {
+      setBackgroundBusy(false)
+    }
+  }
+
   const countdown = useMemo(() => {
     const minutes = Math.floor(nextBreakSeconds / 60)
     const seconds = nextBreakSeconds % 60
@@ -81,6 +102,25 @@ export default function ReminderPanel() {
           {permission === 'denied' ? 'Desktop notifications blocked' : 'Enable desktop notifications'}
         </button>
       )}
+
+      <div className="reminder-status">
+        <span>Background monitoring</span>
+        <strong>{backgroundMonitoring ? 'ACTIVE' : 'OFF'}</strong>
+      </div>
+
+      <p className="reminder-copy">
+        {backgroundMonitoring
+          ? 'Monitoring continues while you use other apps. ErgoVision can send macOS posture alerts even if this dashboard tab is closed.'
+          : 'Enable this before switching to other apps or closing the dashboard.'}
+      </p>
+
+      <button className="button primary" disabled={backgroundBusy} onClick={toggleBackgroundMonitoring}>
+        {backgroundBusy
+          ? 'Working…'
+          : backgroundMonitoring
+            ? 'Stop background monitoring'
+            : 'Enable background monitoring'}
+      </button>
 
       <div className="setting-grid one-row">
         <label>
