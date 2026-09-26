@@ -69,18 +69,18 @@ def assess_tracking(landmarks: LandmarkSet | None) -> TrackingAssessment:
     hips_visible = all(landmarks.has(n) for n in hips) and ps >= 0.45
     eyes_visible = all(landmarks.has(n) for n in eyes) and es >= 0.45
 
-    torso_confidence = (ss + ps) / 2.0 if hips_visible else 0.0
-    confidence = 0.35 * hs + 0.35 * ss + 0.30 * ps
+    # Desktop ergonomics only requires the upper body.
+    # Hip visibility is informational and does not affect tracking quality.
+    torso_confidence = ss
+    confidence = 0.55 * hs + 0.45 * ss
     reliable = head_visible and shoulders_visible and confidence >= 0.55
-    quality = "EXCELLENT" if reliable and hips_visible and confidence >= 0.82 else "FAIR" if reliable else "POOR"
+    quality = "EXCELLENT" if reliable and confidence >= 0.82 else "FAIR" if reliable else "POOR"
 
     guidance = []
     if not head_visible:
         guidance.append("Keep your full head and face visible.")
     if not shoulders_visible:
         guidance.append("Move back until both shoulders are visible.")
-    if not hips_visible:
-        guidance.append("Move back so both hips are visible for stronger hunch detection.")
     if not eyes_visible:
         guidance.append("Face the camera so both eyes are clearly visible for blink tracking.")
     if confidence < 0.55:

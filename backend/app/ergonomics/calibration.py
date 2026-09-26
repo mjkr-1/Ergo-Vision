@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from statistics import mean, pstdev
+from statistics import mean, median, pstdev
 
 from .geometry import clamp
 from .measurements import ErgonomicMeasurements, estimate_slouch
@@ -22,6 +22,11 @@ class CalibrationProfile:
     head_shoulder_gap_ratio: float = 0.0
     torso_depth_ratio: float = 0.0
     forward_head_indicator: float = 0.0
+    head_tilt_degrees: float = 0.0
+    shoulder_alignment_degrees: float = 0.0
+    neck_offset: float = 0.0
+    gaze_vertical_degrees: float = 0.0
+    torso_lean_degrees: float = 0.0
     samples: int = 0
 
     @classmethod
@@ -33,25 +38,138 @@ class CalibrationProfile:
             return cls()
 
     def capture(self, samples: list[ErgonomicMeasurements]) -> None:
-        valid = [s for s in samples if s.person_detected and s.torso_length_ratio > 0 and s.head_shoulder_gap_ratio > 0]
+        # Hips are intentionally not required. A normal laptop user often
+        # has only the head, face and shoulders visible.
+        valid = [
+            sample
+            for sample in samples
+            if sample.person_detected
+            and sample.head_shoulder_gap_ratio > 0
+        ]
+
         if len(valid) < 20:
-            raise ValueError("Calibration needs a stable view of your head, shoulders and hips. Hold an upright posture for 2–3 seconds and try again.")
-        torso = [s.torso_length_ratio for s in valid]
-        gaps = [s.head_shoulder_gap_ratio for s in valid]
-        depths = [s.torso_depth_ratio for s in valid]
-        forward = [s.forward_head_indicator for s in valid]
-        if mean(estimate_slouch(s) for s in valid) >= 0.45:
-            raise ValueError("Sit upright before calibrating, then hold still for 2–3 seconds.")
-        if _relative_variation(torso) > 0.08 or _relative_variation(gaps) > 0.10 or pstdev(forward) > 0.10:
-            raise ValueError("Too much movement was detected. Hold still and try calibration again.")
+            raise ValueError(
+                "Calibration needs a stable view of your head and shoulders. "
+                "Sit upright and hold still for 2–3 seconds."
+            )
+
+        gaps = [sample.head_shoulder_gap_ratio for sample in valid]
+        forward = [sample.forward_head_indicator for sample in valid]
+
+        head_tilts = [
+            getattr(
+                sample,
+                "head_tilt_signed_degrees",
+                sample.head_tilt_degrees,
+            )
+            for sample in valid
+        ]
+
+        shoulder_angles = [
+            getattr(
+                sample,
+                "shoulder_alignment_signed_degrees",
+                sample.shoulder_alignment_degrees,
+            )
+            for sample in valid
+        ]
+
+        neck_offsets = [sample.neck_offset for sample in valid]
+        gaze_angles = [sample.gaze_vertical_degrees for sample in valid]
+
+        # Reject only genuinely unstable upper-body calibration.
+        if (
+            _relative_variation(gaps) > 0.12
+            or pstdev(forward) > 0.12
+            or pstdev(head_tilts) > 4.0
+            or pstdev(shoulder_angles) > 4.0
+        ):
+            raise ValueError(
+                "Too much movement was detected. Sit upright, hold still, "
+                "and try calibration again."
+            )
+
         self.calibrated = True
         self.captured_at = datetime.now(timezone.utc).isoformat()
-        self.torso_length_ratio = mean(torso)
-        self.head_shoulder_gap_ratio = mean(gaps)
-        self.torso_depth_ratio = mean(depths)
-        self.forward_head_indicator = mean(forward)
+
+        # Torso/hip geometry is intentionally excluded.
+        self.torso_length_ratio = 0.0
+        self.torso_depth_ratio = 0.0
+
+        self.head_shoulder_gap_ratio = median(gaps)
+        self.forward_head_indicator = median(forward)
+
+        if hasattr(self, "head_tilt_degrees"):
+            self.head_tilt_degrees = median(head_tilts)
+
+        if hasattr(self, "shoulder_alignment_degrees"):
+            self.shoulder_alignment_degrees = median(shoulder_angles)
+
+        if hasattr(self, "neck_offset"):
+            self.neck_offset = median(neck_offsets)
+
+        if hasattr(self, "gaze_vertical_degrees"):
+            self.gaze_vertical_degrees = median(gaze_angles)
+
+        if hasattr(self, "torso_lean_degrees"):
+            self.torso_lean_degrees = 0.0
+
         self.samples = len(valid)
         self.save()
+
+    def personalize(self, measurement: ErgonomicMeasurements) -> ErgonomicMeasurements:
+        if not self.calibrated or not measurement.person_detected:
+            return measurement
+
+        return replace(
+            measurement,
+            head_tilt_degrees=max(
+                0.0,
+                abs(measurement.head_tilt_signed_degrees - self.head_tilt_degrees) - 2.0,
+            ),
+            shoulder_alignment_degrees=max(
+                0.0,
+                abs(
+                    measurement.shoulder_alignment_signed_degrees
+                    - self.shoulder_alignment_degrees
+                ) - 2.0,
+            ),
+            neck_offset=(
+                max(
+                    0.0,
+                    abs(measurement.neck_offset - self.neck_offset) - 0.035,
+                )
+                * (1 if measurement.neck_offset - self.neck_offset >= 0 else -1)
+            ),
+            gaze_vertical_degrees=(
+                max(
+                    0.0,
+                    abs(
+                        measurement.gaze_vertical_degrees
+                        - self.gaze_vertical_degrees
+                    ) - 4.0,
+                )
+                * (
+                    1
+                    if measurement.gaze_vertical_degrees
+                    - self.gaze_vertical_degrees >= 0
+                    else -1
+                )
+            ),
+            torso_lean_degrees=max(
+                0.0,
+                abs(
+                    measurement.torso_lean_signed_degrees
+                    - self.torso_lean_degrees
+                ) - 2.5,
+            ),
+            forward_head_indicator=max(
+                0.0,
+                measurement.forward_head_indicator
+                - self.forward_head_indicator
+                - 0.05
+            ),
+        )
 
     def clear(self) -> None:
         self.calibrated = False
@@ -60,6 +178,11 @@ class CalibrationProfile:
         self.head_shoulder_gap_ratio = 0.0
         self.torso_depth_ratio = 0.0
         self.forward_head_indicator = 0.0
+        self.head_tilt_degrees = 0.0
+        self.shoulder_alignment_degrees = 0.0
+        self.neck_offset = 0.0
+        self.gaze_vertical_degrees = 0.0
+        self.torso_lean_degrees = 0.0
         self.samples = 0
         try:
             CALIBRATION_PATH.unlink(missing_ok=True)
@@ -72,21 +195,85 @@ class CalibrationProfile:
         temp.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
         temp.replace(CALIBRATION_PATH)
 
-    def slouch_indicator(self, measurement: ErgonomicMeasurements) -> float:
+    def slouch_indicator(
+        self,
+        measurement: ErgonomicMeasurements,
+    ) -> float:
+        """
+        Upper-body hunch estimate.
+
+        Uses:
+        - head-to-shoulder vertical compression
+        - apparent forward-head/proximity change
+
+        Hip landmarks are deliberately ignored.
+        """
+
+        if not measurement.person_detected:
+            return 0.0
+
+        # Before personal calibration, use conservative upper-body defaults.
         if not self.calibrated:
-            return estimate_slouch(measurement)
-        signals: list[float] = []
-        if self.torso_length_ratio > 0 and measurement.torso_length_ratio > 0:
-            drop = self.torso_length_ratio - measurement.torso_length_ratio
-            signals.append(clamp(drop / max(self.torso_length_ratio * 0.24, 0.22), 0.0, 1.0))
-            depth_change = measurement.torso_depth_ratio - self.torso_depth_ratio
-            signals.append(clamp(depth_change / 0.55, 0.0, 1.0))
-        if self.head_shoulder_gap_ratio > 0 and measurement.head_shoulder_gap_ratio > 0:
-            gap_drop = self.head_shoulder_gap_ratio - measurement.head_shoulder_gap_ratio
-            signals.append(clamp(gap_drop / max(self.head_shoulder_gap_ratio * 0.28, 0.18), 0.0, 1.0))
-        forward_change = measurement.forward_head_indicator - self.forward_head_indicator
-        signals.append(clamp(forward_change / 0.35, 0.0, 1.0))
-        return max(signals, default=estimate_slouch(measurement))
+            gap_signal = 0.0
+
+            if measurement.head_shoulder_gap_ratio > 0:
+                gap_signal = clamp(
+                    (1.0 - measurement.head_shoulder_gap_ratio) / 0.45,
+                    0.0,
+                    1.0,
+                )
+
+            forward_signal = clamp(
+                (measurement.forward_head_indicator - 0.35) / 0.35,
+                0.0,
+                1.0,
+            )
+
+            return clamp(
+                0.60 * gap_signal + 0.40 * forward_signal,
+                0.0,
+                1.0,
+            )
+
+        # Personalized hunch detection.
+        gap_signal = 0.0
+
+        if (
+            self.head_shoulder_gap_ratio > 0
+            and measurement.head_shoulder_gap_ratio > 0
+        ):
+            gap_drop = (
+                self.head_shoulder_gap_ratio
+                - measurement.head_shoulder_gap_ratio
+            )
+
+            gap_signal = clamp(
+                gap_drop
+                / max(self.head_shoulder_gap_ratio * 0.18, 0.10),
+                0.0,
+                1.0,
+            )
+
+        forward_change = (
+            measurement.forward_head_indicator
+            - self.forward_head_indicator
+        )
+
+        forward_signal = clamp(
+            forward_change / 0.20,
+            0.0,
+            1.0,
+        )
+
+        # Ignore tiny normal movements around the calibrated posture.
+        if gap_signal < 0.12 and forward_signal < 0.12:
+            return 0.0
+
+        return clamp(
+            0.60 * gap_signal + 0.40 * forward_signal,
+            0.0,
+            1.0,
+        )
 
     def as_dict(self) -> dict:
         return asdict(self)

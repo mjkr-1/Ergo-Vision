@@ -6,11 +6,11 @@ interface ReminderSettings {
   breakMinutes: number
 }
 
-const STORAGE_KEY = 'ergovision.reminders.v2'
+const STORAGE_KEY = 'ergovision.reminders.v3'
 const DEFAULTS: ReminderSettings = {
   movementBreaks: false,
   desktopNotifications: true,
-  breakMinutes: 30,
+  breakMinutes: 5,
 }
 
 function loadSettings(): ReminderSettings {
@@ -90,10 +90,12 @@ export default function ReminderPanel() {
             lastBreakAt.current = Date.now()
             setSettings((current) => ({ ...current, breakMinutes }))
           }}>
-            <option value={20}>Every 20 min</option>
-            <option value={30}>Every 30 min</option>
-            <option value={45}>Every 45 min</option>
-            <option value={60}>Every 60 min</option>
+            <option value={1}>Every 1 min</option>
+            <option value={2}>Every 2 min</option>
+            <option value={5}>Every 5 min</option>
+            <option value={7}>Every 7 min</option>
+            <option value={10}>Every 10 min</option>
+            <option value={15}>Every 15 min</option>
           </select>
         </label>
       </div>

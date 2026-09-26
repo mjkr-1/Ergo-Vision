@@ -128,19 +128,25 @@ class PosturePipeline:
             measurements = compute_measurements(landmarks)
             smoothed = self.smoother.smooth(measurements)
 
-            if tracking.quality == "EXCELLENT" and tracking.hips_visible and smoothed.person_detected:
+            if tracking.quality == "EXCELLENT" and smoothed.person_detected:
                 self._recent_measurements.append(smoothed)
 
             smoothed.slouch_indicator = self.calibration.slouch_indicator(smoothed)
+
+
+            # Keep raw geometry for proximity drift, but evaluate posture
+            # relative to the user's calibrated upright baseline.
+            proximity_drift = self._proximity_drift(smoothed)
+
+            evaluated = self.calibration.personalize(smoothed)
+            evaluated.slouch_indicator = smoothed.slouch_indicator
 
             if not tracking.reliable:
                 status = "LOW_CONFIDENCE"
                 score = 0
             else:
-                status = self.classifier.classify(smoothed)
-                score, _breakdown = compute_score(smoothed)
-
-            proximity_drift = self._proximity_drift(smoothed)
+                status = self.classifier.classify(evaluated)
+                score, _breakdown = compute_score(evaluated)
             ocular = self.ocular_engine.update(
                 landmarks=landmarks,
                 eye_confidence=tracking.eye_confidence,
@@ -186,7 +192,7 @@ class PosturePipeline:
             encoded, jpeg = cv2.imencode(".jpg", annotated)
 
             with self._lock:
-                self._current_measurements = smoothed
+                self._current_measurements = evaluated
                 self._current_tracking = tracking
                 self._current_ocular = ocular
                 self._current_exposure = exposure

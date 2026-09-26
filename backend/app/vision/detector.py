@@ -45,16 +45,15 @@ class Detector:
         try:
             base_options = mp.tasks.BaseOptions
             vision = mp.tasks.vision
-            running_mode = vision.RunningMode.LIVE_STREAM
+            running_mode = vision.RunningMode.VIDEO
 
             face_options = vision.FaceLandmarkerOptions(
                 base_options=base_options(model_asset_path=FACE_MODEL_PATH),
                 running_mode=running_mode,
                 num_faces=1,
-                min_face_detection_confidence=0.3,
-                min_face_presence_confidence=0.3,
-                min_tracking_confidence=0.3,
-                result_callback=self._face_callback,
+                min_face_detection_confidence=0.5,
+                min_face_presence_confidence=0.5,
+                min_tracking_confidence=0.5,
             )
             self.face_landmarker = vision.FaceLandmarker.create_from_options(face_options)
 
@@ -64,8 +63,7 @@ class Detector:
                 num_poses=1,
                 min_pose_detection_confidence=0.3,
                 min_pose_presence_confidence=0.3,
-                min_tracking_confidence=0.3,
-                result_callback=self._pose_callback,
+                min_tracking_confidence=0.5,
             )
             self.pose_landmarker = vision.PoseLandmarker.create_from_options(pose_options)
 
@@ -98,9 +96,32 @@ class Detector:
         if self.model_loaded and not DEMO_MODE:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             image = mp_image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
             try:
-                self.face_landmarker.detect_async(image, timestamp)
-                self.pose_landmarker.detect_async(image, timestamp)
+                # Run face and pose on the exact same camera frame.
+                face_result = self.face_landmarker.detect_for_video(
+                    image, timestamp
+                )
+                pose_result = self.pose_landmarker.detect_for_video(
+                    image, timestamp
+                )
+
+                face = landmarks_from_face_results(
+                    face_result.face_landmarks
+                )
+                pose = landmarks_from_pose_results(
+                    pose_result.pose_landmarks
+                )
+
+                merged = merge_landmarks(face, pose)
+
+                with self._landmark_lock:
+                    self._last_face = face
+                    self._last_pose = pose
+                    self.last_landmarks = (
+                        merged if merged.landmarks else None
+                    )
+
             except Exception as exc:
                 logger.debug("Detection error: %s", exc)
         elif DEMO_MODE:
