@@ -27,7 +27,16 @@ async def websocket_endpoint(websocket: WebSocket):
             pipeline = get_pipeline()
             if pipeline is not None:
                 await websocket.send_json(pipeline.get_current())
-            await asyncio.sleep(WEBSOCKET_UPDATE_INTERVAL)
+
+            try:
+                message = await asyncio.wait_for(
+                    websocket.receive(),
+                    timeout=WEBSOCKET_UPDATE_INTERVAL,
+                )
+                if message.get("type") == "websocket.disconnect":
+                    break
+            except asyncio.TimeoutError:
+                pass
     except (WebSocketDisconnect, RuntimeError):
         pass
     except Exception:
