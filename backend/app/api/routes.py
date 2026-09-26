@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 import app.config as config
 from ..pipeline import PosturePipeline
 from .schemas import (
+    BackgroundMonitoringResponse,
     CalibrationResponse,
     CameraDeviceResponse,
     CameraSelectRequest,
@@ -59,24 +60,17 @@ def session_stats():
 
 @router.post("/api/session/start", response_model=SessionStatsResponse)
 def session_start():
-    pipe = _require_pipeline()
-    pipe.tracker.start()
-    return SessionStatsResponse(**pipe.get_session_stats())
+    return SessionStatsResponse(**_require_pipeline().start_session())
 
 
 @router.post("/api/session/stop", response_model=SessionStatsResponse)
 def session_stop():
-    pipe = _require_pipeline()
-    pipe.tracker.stop()
-    return SessionStatsResponse(**pipe.get_session_stats())
+    return SessionStatsResponse(**_require_pipeline().stop_session())
 
 
 @router.post("/api/session/reset", response_model=SessionStatsResponse)
 def session_reset():
-    pipe = _require_pipeline()
-    pipe.tracker.reset()
-    pipe.tracker.start()
-    return SessionStatsResponse(**pipe.get_session_stats())
+    return SessionStatsResponse(**_require_pipeline().reset_session())
 
 
 @router.get("/api/calibration", response_model=CalibrationResponse)
@@ -101,6 +95,7 @@ def calibration_clear():
 @router.get("/api/camera/devices", response_model=list[CameraDeviceResponse])
 def camera_devices():
     return [CameraDeviceResponse(**item) for item in _require_pipeline().camera_devices()]
+
 
 @router.post("/api/camera/select", response_model=CameraStatusResponse)
 def camera_select(request: CameraSelectRequest):
@@ -138,3 +133,33 @@ def get_config():
         target_fps=config.TARGET_FPS,
         demo_mode=config.DEMO_MODE,
     )
+
+
+@router.get("/api/background", response_model=BackgroundMonitoringResponse)
+def background_status():
+    pipe = _require_pipeline()
+    return BackgroundMonitoringResponse(
+        enabled=pipe.background_monitoring,
+        camera_active=pipe.camera.is_opened,
+    )
+
+
+@router.post("/api/background/start", response_model=BackgroundMonitoringResponse)
+def background_start():
+    return BackgroundMonitoringResponse(
+        **_require_pipeline().enable_background_monitoring()
+    )
+
+
+@router.post("/api/background/stop", response_model=BackgroundMonitoringResponse)
+def background_stop():
+    pipe = _require_pipeline()
+    result = pipe.disable_background_monitoring()
+
+    from .websocket import active_connections
+
+    if not active_connections:
+        pipe.deactivate_camera()
+        result["camera_active"] = False
+
+    return BackgroundMonitoringResponse(**result)

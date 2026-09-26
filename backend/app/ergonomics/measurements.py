@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from statistics import median
 
 from ..vision.landmarks import LandmarkSet
 from .geometry import (
@@ -13,12 +14,15 @@ from .geometry import (
 @dataclass
 class ErgonomicMeasurements:
     head_tilt_degrees: float = 0.0
+    head_tilt_signed_degrees: float = 0.0
     shoulder_alignment_score: float = 1.0
     shoulder_alignment_degrees: float = 0.0
+    shoulder_alignment_signed_degrees: float = 0.0
     neck_offset: float = 0.0
     forward_head_indicator: float = 0.0
     gaze_vertical_degrees: float = 0.0
     torso_lean_degrees: float = 0.0
+    torso_lean_signed_degrees: float = 0.0
     torso_length_ratio: float = 0.0
     head_shoulder_gap_ratio: float = 0.0
     torso_depth_ratio: float = 0.0
@@ -44,7 +48,9 @@ def compute_measurements(landmarks: LandmarkSet | None) -> ErgonomicMeasurements
     measurements = ErgonomicMeasurements(person_detected=True)
 
     if has_face:
-        measurements.head_tilt_degrees = _compute_head_tilt(landmarks)
+        head_tilt = _compute_head_tilt(landmarks)
+        measurements.head_tilt_signed_degrees = head_tilt
+        measurements.head_tilt_degrees = abs(head_tilt)
         measurements.gaze_vertical_degrees = _compute_gaze_vertical(landmarks)
 
     if has_face and has_shoulders:
@@ -56,6 +62,7 @@ def compute_measurements(landmarks: LandmarkSet | None) -> ErgonomicMeasurements
         (
             measurements.shoulder_alignment_score,
             measurements.shoulder_alignment_degrees,
+            measurements.shoulder_alignment_signed_degrees,
         ) = _compute_shoulder_alignment(landmarks)
 
     if has_shoulders and has_hips:
@@ -63,6 +70,7 @@ def compute_measurements(landmarks: LandmarkSet | None) -> ErgonomicMeasurements
             measurements.torso_lean_degrees,
             measurements.torso_length_ratio,
             measurements.torso_depth_ratio,
+            measurements.torso_lean_signed_degrees,
         ) = _compute_torso_metrics(landmarks)
 
     measurements.slouch_indicator = estimate_slouch(measurements)
@@ -79,7 +87,7 @@ def estimate_slouch(m: ErgonomicMeasurements) -> float:
     if m.head_shoulder_gap_ratio > 0:
         signals.append(clamp((1.00 - m.head_shoulder_gap_ratio) / 0.45, 0.0, 1.0))
 
-    return max(signals, default=0.0)
+    return median(signals) if signals else 0.0
 
 
 def _compute_head_tilt(landmarks: LandmarkSet) -> float:
@@ -87,18 +95,27 @@ def _compute_head_tilt(landmarks: LandmarkSet) -> float:
     right = landmarks.get_pos("right_eye_outer")
     if left is None or right is None:
         return 0.0
-    return abs(angle_from_horizontal(left, right))
+    return angle_from_horizontal(left, right)
 
 
-def _compute_shoulder_alignment(landmarks: LandmarkSet) -> tuple[float, float]:
+def _compute_shoulder_alignment(landmarks: LandmarkSet) -> tuple[float, float, float]:
     left = landmarks.get_pos("left_shoulder")
     right = landmarks.get_pos("right_shoulder")
+
     if left is None or right is None:
-        return 1.0, 0.0
-    angle = abs(angle_from_horizontal(left, right))
-    degrees = abs(angle) if angle <= 90 else 180 - abs(angle)
+        return 1.0, 0.0, 0.0
+
+    angle = angle_from_horizontal(left, right)
+
+    if abs(angle) <= 90:
+        signed_degrees = angle
+    else:
+        signed_degrees = (180 - abs(angle)) * (1 if angle >= 0 else -1)
+
+    degrees = abs(signed_degrees)
     alignment = max(0.0, 1.0 - degrees / 20.0)
-    return alignment, degrees
+
+    return alignment, degrees, signed_degrees
 
 
 def _compute_neck_offset(landmarks: LandmarkSet) -> float:
@@ -159,13 +176,13 @@ def _compute_head_shoulder_gap(landmarks: LandmarkSet) -> float:
     return vertical_gap / shoulder_width
 
 
-def _compute_torso_metrics(landmarks: LandmarkSet) -> tuple[float, float, float]:
+def _compute_torso_metrics(landmarks: LandmarkSet) -> tuple[float, float, float, float]:
     left_shoulder = landmarks.get("left_shoulder")
     right_shoulder = landmarks.get("right_shoulder")
     left_hip = landmarks.get("left_hip")
     right_hip = landmarks.get("right_hip")
     if not all((left_shoulder, right_shoulder, left_hip, right_hip)):
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
 
     left_shoulder_pos = (left_shoulder.x, left_shoulder.y)
     right_shoulder_pos = (right_shoulder.x, right_shoulder.y)
@@ -176,13 +193,14 @@ def _compute_torso_metrics(landmarks: LandmarkSet) -> tuple[float, float, float]
     hip_mid = calculate_midpoint(left_hip_pos, right_hip_pos)
     shoulder_width = calculate_distance(left_shoulder_pos, right_shoulder_pos)
     if shoulder_width < 1e-6:
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
 
-    torso_lean = abs(angle_from_vertical(hip_mid, shoulder_mid))
+    torso_lean_signed = angle_from_vertical(hip_mid, shoulder_mid)
+    torso_lean = abs(torso_lean_signed)
     torso_length_ratio = calculate_distance(shoulder_mid, hip_mid) / shoulder_width
 
     shoulder_z = (left_shoulder.z + right_shoulder.z) / 2.0
     hip_z = (left_hip.z + right_hip.z) / 2.0
     torso_depth_ratio = clamp((hip_z - shoulder_z) / shoulder_width, -2.0, 2.0)
 
-    return torso_lean, torso_length_ratio, torso_depth_ratio
+    return torso_lean, torso_length_ratio, torso_depth_ratio, torso_lean_signed

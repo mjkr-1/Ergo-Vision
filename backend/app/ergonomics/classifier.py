@@ -39,7 +39,6 @@ class PostureClassifier:
             self._check_threshold(abs(measurement.neck_offset), NECK_OFFSET_WARNING, NECK_OFFSET_BAD),
             self._check_threshold(measurement.forward_head_indicator, FORWARD_HEAD_WARNING, FORWARD_HEAD_BAD),
             self._check_threshold(measurement.gaze_vertical_degrees, GAZE_WARNING_DEGREES, GAZE_BAD_DEGREES),
-            self._check_threshold(measurement.torso_lean_degrees, TORSO_LEAN_WARNING_DEGREES, TORSO_LEAN_BAD_DEGREES),
             self._check_threshold(measurement.slouch_indicator, SLOUCH_WARNING, SLOUCH_BAD),
         )
         worst = max(checks, key=lambda value: severity[value])

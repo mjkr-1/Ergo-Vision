@@ -7,13 +7,13 @@ interface Props {
 
 const SHOULDER_LABEL = (score: number) => {
   if (score >= 0.95) return 'Good'
-  if (score >= 0.75) return 'Slight Imbalance'
+  if (score >= 0.75) return 'Slight imbalance'
   return 'Poor'
 }
 
 const SLOUCH_LABEL = (value: number, config: AppConfig | null) => {
   if (!config) return '—'
-  if (value >= config.slouch_bad) return 'Poor'
+  if (value >= config.slouch_bad) return 'High deviation'
   if (value >= config.slouch_warning) return 'Slouching'
   return 'Upright'
 }
@@ -21,32 +21,28 @@ const SLOUCH_LABEL = (value: number, config: AppConfig | null) => {
 export default function Metrics({ posture, config }: Props) {
   const measurement = posture?.measurements
   if (!measurement) {
-    return (
-      <div className="card">
-        <div className="card-title">Ergonomic Metrics</div>
-        <p>Waiting for data…</p>
-      </div>
-    )
+    return <div className="card"><div className="card-title">Posture Metrics</div><p>Waiting for data…</p></div>
   }
 
   return (
     <div className="card">
-      <div className="card-title">Ergonomic Metrics</div>
+      <div className="card-title">Posture Metrics</div>
       <table className="metrics-table">
         <tbody>
           <tr><td>Slouch / Hunch</td><td>{SLOUCH_LABEL(measurement.slouch_indicator, config)}</td></tr>
-          <tr><td>Torso Lean</td><td>{measurement.torso_lean_degrees.toFixed(1)}°</td></tr>
           <tr><td>Head Tilt</td><td>{measurement.head_tilt_degrees.toFixed(1)}°</td></tr>
           <tr><td>Shoulder Angle</td><td>{measurement.shoulder_alignment_degrees.toFixed(1)}°</td></tr>
           <tr><td>Shoulder Alignment</td><td>{SHOULDER_LABEL(measurement.shoulder_alignment_score)}</td></tr>
           <tr><td>Neck Offset</td><td>{(measurement.neck_offset > 0 ? '+' : '') + measurement.neck_offset.toFixed(2)}</td></tr>
-          <tr><td>Forward Head</td><td>{Math.round(measurement.forward_head_indicator * 100)}%</td></tr>
-          <tr><td>Gaze Angle</td><td>{measurement.gaze_vertical_degrees.toFixed(1)}°</td></tr>
+          <tr><td>Forward-head Indicator</td><td>{Math.round(measurement.forward_head_indicator * 100)}%</td></tr>
+          <tr><td>Downward Head Angle</td><td>{measurement.gaze_vertical_degrees.toFixed(1)}°</td></tr>
         </tbody>
       </table>
-      {measurement.torso_length_ratio === 0 && (
-        <p className="metric-note">Tip: keep your hips visible for stronger torso and hunch detection.</p>
-      )}
+      <div className="confidence-strip">
+        <span>Head {Math.round((posture?.tracking.head_confidence ?? 0) * 100)}%</span>
+        <span>Shoulders {Math.round((posture?.tracking.shoulder_confidence ?? 0) * 100)}%</span>
+        <span>Eyes {Math.round((posture?.tracking.eye_confidence ?? 0) * 100)}%</span>
+      </div>
     </div>
   )
 }

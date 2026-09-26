@@ -13,6 +13,11 @@ class TrackingAssessment:
     head_visible: bool = False
     shoulders_visible: bool = False
     hips_visible: bool = False
+    eyes_visible: bool = False
+    head_confidence: float = 0.0
+    shoulder_confidence: float = 0.0
+    torso_confidence: float = 0.0
+    eye_confidence: float = 0.0
     guidance: list[str] | None = None
 
     def as_dict(self) -> dict:
@@ -39,20 +44,59 @@ def assess_tracking(landmarks: LandmarkSet | None) -> TrackingAssessment:
     heads = ("nose_tip", "left_eye_outer", "right_eye_outer", "chin", "forehead")
     shoulders = ("left_shoulder", "right_shoulder")
     hips = ("left_hip", "right_hip")
-    hs, ss, ps = _group(landmarks, heads), _group(landmarks, shoulders), _group(landmarks, hips)
+    eyes = (
+        "left_eye_outer",
+        "left_eye_upper_outer",
+        "left_eye_upper_inner",
+        "left_eye_inner",
+        "left_eye_lower_inner",
+        "left_eye_lower_outer",
+        "right_eye_inner",
+        "right_eye_upper_inner",
+        "right_eye_upper_outer",
+        "right_eye_outer",
+        "right_eye_lower_outer",
+        "right_eye_lower_inner",
+    )
+
+    hs = _group(landmarks, heads)
+    ss = _group(landmarks, shoulders)
+    ps = _group(landmarks, hips)
+    es = _group(landmarks, eyes)
+
     head_visible = all(landmarks.has(n) for n in heads) and hs >= 0.45
     shoulders_visible = all(landmarks.has(n) for n in shoulders) and ss >= 0.45
     hips_visible = all(landmarks.has(n) for n in hips) and ps >= 0.45
-    confidence = 0.35 * hs + 0.35 * ss + 0.30 * ps
+    eyes_visible = all(landmarks.has(n) for n in eyes) and es >= 0.45
+
+    # Desktop ergonomics only requires the upper body.
+    # Hip visibility is informational and does not affect tracking quality.
+    torso_confidence = ss
+    confidence = 0.55 * hs + 0.45 * ss
     reliable = head_visible and shoulders_visible and confidence >= 0.55
-    quality = "EXCELLENT" if reliable and hips_visible and confidence >= 0.82 else "FAIR" if reliable else "POOR"
+    quality = "EXCELLENT" if reliable and confidence >= 0.82 else "FAIR" if reliable else "POOR"
+
     guidance = []
     if not head_visible:
         guidance.append("Keep your full head and face visible.")
     if not shoulders_visible:
         guidance.append("Move back until both shoulders are visible.")
-    if not hips_visible:
-        guidance.append("Move back so both hips are visible for stronger hunch detection.")
+    if not eyes_visible:
+        guidance.append("Face the camera so both eyes are clearly visible for blink tracking.")
     if confidence < 0.55:
         guidance.append("Improve lighting and face the camera more directly.")
-    return TrackingAssessment(round(confidence, 3), quality, reliable, head_visible, shoulders_visible, hips_visible, guidance)
+
+    return TrackingAssessment(
+        confidence=round(confidence, 3),
+        quality=quality,
+        reliable=reliable,
+        head_visible=head_visible,
+        shoulders_visible=shoulders_visible,
+        hips_visible=hips_visible,
+        eyes_visible=eyes_visible,
+        head_confidence=round(hs, 3),
+        shoulder_confidence=round(ss, 3),
+        torso_confidence=round(torso_confidence, 3),
+        eye_confidence=round(es, 3),
+        guidance=guidance,
+    )
