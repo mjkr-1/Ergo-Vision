@@ -2,14 +2,14 @@
 
 # ErgoVision
 
-**Privacy-first, real-time posture monitoring that runs locally on your computer.**
+**Privacy-first, personalized screen ergonomics with confidence-aware feedback — running locally on your computer.**
 
 [![CI](https://github.com/mjkr-1/Ergo-Vision/actions/workflows/ci.yml/badge.svg)](https://github.com/mjkr-1/Ergo-Vision/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://www.python.org/)
 [![React 18](https://img.shields.io/badge/React-18-61DAFB.svg)](https://react.dev/)
 
-ErgoVision uses OpenCV and MediaPipe to estimate ergonomic posture indicators from a webcam, then presents live feedback, session metrics, and a posture score in a local React dashboard.
+ErgoVision uses OpenCV and MediaPipe to estimate ergonomic posture indicators from a webcam, then combines personal calibration, signal confidence, temporal exposure, visual ergonomic indicators and verified correction feedback in a local React dashboard.
 
 **Ergonomic guidance only. ErgoVision is not a medical device and does not provide diagnosis or treatment.**
 
@@ -20,12 +20,16 @@ ErgoVision uses OpenCV and MediaPipe to estimate ergonomic posture indicators fr
 - Local webcam processing with no cloud inference
 - Face and pose landmark analysis with MediaPipe Tasks
 - Tracking-confidence gating so weak landmarks do not produce false GOOD scores
+- Explicit signal-readiness states for tracking, calibration and warm-up
 - Guided camera framing with head / shoulder / hip visibility checks
 - Runtime camera selection for built-in and external webcams
 - Head tilt, shoulder alignment, neck offset, forward-head, gaze and torso indicators
 - Calibrated slouch / hunch detection using shoulders, hips and relative pose depth
 - Personal neutral-posture calibration stored locally on the computer
-- 0–100 posture score with GOOD / WARNING / BAD states
+- Confidence-weighted temporal exposure with prototype risk-seconds and postural drift
+- Personalized EAR baseline, blink-rate tracking and relative-proximity indicators
+- Closed-loop correction alerts that clear only after reliably verified recovery
+- 0–100 ErgoVision Index with GOOD / WARNING / BAD states
 - Live annotated camera stream
 - Actionable posture feedback
 - Session timing, posture percentages, warning counts and average score
@@ -199,11 +203,14 @@ MediaPipe Face + Pose Landmarkers
   ↓
 Landmark merge
   ↓
-Measurements → smoothing → calibration → classification → score → feedback
+Measurements → smoothing → personal calibration → classification
+  ↓
+Confidence + ocular + temporal exposure + intervention state
   ↓
 PosturePipeline
   ├─ cached annotated JPEG
   ├─ session tracker
+  ├─ signal readiness
   └─ current posture event
   ↓
 FastAPI
@@ -268,9 +275,17 @@ The backend exposes health, posture, session, configuration, stream and WebSocke
 
 See [API reference](docs/API.md).
 
+## Research transparency
+
+ErgoVision deliberately distinguishes **working prototype features** from **validated scientific claims**. The ErgoVision Index, risk-seconds, blink/proximity signals and confidence values are engineering indicators; they are not clinical measurements or diagnoses.
+
+The dashboard now exposes when tracking and personal baselines are actually ready instead of presenting every value as equally mature. For the evaluation plan, known failure modes, recommended metrics and claims boundaries, read [Research gaps and validation plan](docs/RESEARCH_GAPS.md).
+
 ## Project status and roadmap
 
-The current version is a local desktop-style web application intended for single-user ergonomic feedback. It includes personal calibration, torso/slouch detection, tracking-confidence gating, guided camera setup, camera selection, live trends, local session history, smart reminders and an installable macOS launcher. Exports, accessibility, signed releases and side-view analysis are the main next extensions.
+The current version is a local desktop-style web application intended for single-user ergonomic feedback. It includes personal calibration, torso/slouch detection, module-level confidence, temporal exposure, personalized eye signals, closed-loop correction verification, guided camera setup, camera selection, live trends and local session history.
+
+The next emphasis is evidence: derived-session exports, a reproducible benchmark protocol, confidence calibration, broader accessibility and optional side-view analysis.
 
 See [Roadmap](docs/ROADMAP.md).
 

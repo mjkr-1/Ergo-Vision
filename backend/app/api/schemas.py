@@ -41,6 +41,9 @@ class OcularInfo(BaseModel):
     blink_rate_per_min: float
     inter_blink_interval_seconds: float
     observation_seconds: float
+    baseline_observation_seconds: float
+    baseline_required_seconds: float
+    blink_ready: bool
     visual_load: float
     proximity_drift: float
 
@@ -54,6 +57,9 @@ class ExposureInfo(BaseModel):
     postural_drift: float
     baseline_risk: float
     recent_risk: float
+    baseline_ready: bool
+    baseline_observation_seconds: float
+    baseline_required_seconds: float
     available: bool
 
 
@@ -86,6 +92,7 @@ class PostureCurrent(BaseModel):
     intervention: InterventionInfo
     feedback: list[str]
     timestamp: str
+    posture_calibrated: bool
     person_detected: bool
 
 
