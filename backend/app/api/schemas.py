@@ -185,3 +185,8 @@ class HealthResponse(BaseModel):
     demo_mode: bool
     uptime_seconds: float
     fps: float
+
+
+class BackgroundMonitoringResponse(BaseModel):
+    enabled: bool
+    camera_active: bool

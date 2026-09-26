@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { api } from '../services/api'
 
 interface ReminderSettings {
   movementBreaks: boolean
@@ -6,11 +7,11 @@ interface ReminderSettings {
   breakMinutes: number
 }
 
-const STORAGE_KEY = 'ergovision.reminders.v2'
+const STORAGE_KEY = 'ergovision.reminders.v3'
 const DEFAULTS: ReminderSettings = {
   movementBreaks: false,
   desktopNotifications: true,
-  breakMinutes: 30,
+  breakMinutes: 5,
 }
 
 function loadSettings(): ReminderSettings {
@@ -26,8 +27,16 @@ export default function ReminderPanel() {
   const [settings, setSettings] = useState<ReminderSettings>(loadSettings)
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() => 'Notification' in window ? Notification.permission : 'unsupported')
   const [nextBreakSeconds, setNextBreakSeconds] = useState(settings.breakMinutes * 60)
+  const [backgroundMonitoring, setBackgroundMonitoring] = useState(false)
+  const [backgroundBusy, setBackgroundBusy] = useState(false)
   const settingsRef = useRef(settings)
   const lastBreakAt = useRef(Date.now())
+
+  useEffect(() => {
+    api.backgroundStatus()
+      .then((status) => setBackgroundMonitoring(status.enabled))
+      .catch(() => setBackgroundMonitoring(false))
+  }, [])
 
   useEffect(() => {
     settingsRef.current = settings
@@ -60,6 +69,18 @@ export default function ReminderPanel() {
     setPermission(result)
   }
 
+  const toggleBackgroundMonitoring = async () => {
+    setBackgroundBusy(true)
+    try {
+      const result = backgroundMonitoring
+        ? await api.backgroundStop()
+        : await api.backgroundStart()
+      setBackgroundMonitoring(result.enabled)
+    } finally {
+      setBackgroundBusy(false)
+    }
+  }
+
   const countdown = useMemo(() => {
     const minutes = Math.floor(nextBreakSeconds / 60)
     const seconds = nextBreakSeconds % 60
@@ -82,6 +103,25 @@ export default function ReminderPanel() {
         </button>
       )}
 
+      <div className="reminder-status">
+        <span>Background monitoring</span>
+        <strong>{backgroundMonitoring ? 'ACTIVE' : 'OFF'}</strong>
+      </div>
+
+      <p className="reminder-copy">
+        {backgroundMonitoring
+          ? 'Monitoring continues while you use other apps. ErgoVision can send macOS posture alerts even if this dashboard tab is closed.'
+          : 'Enable this before switching to other apps or closing the dashboard.'}
+      </p>
+
+      <button className="button primary" disabled={backgroundBusy} onClick={toggleBackgroundMonitoring}>
+        {backgroundBusy
+          ? 'Working…'
+          : backgroundMonitoring
+            ? 'Stop background monitoring'
+            : 'Enable background monitoring'}
+      </button>
+
       <div className="setting-grid one-row">
         <label>
           <span>Movement break</span>
@@ -90,10 +130,12 @@ export default function ReminderPanel() {
             lastBreakAt.current = Date.now()
             setSettings((current) => ({ ...current, breakMinutes }))
           }}>
-            <option value={20}>Every 20 min</option>
-            <option value={30}>Every 30 min</option>
-            <option value={45}>Every 45 min</option>
-            <option value={60}>Every 60 min</option>
+            <option value={1}>Every 1 min</option>
+            <option value={2}>Every 2 min</option>
+            <option value={5}>Every 5 min</option>
+            <option value={7}>Every 7 min</option>
+            <option value={10}>Every 10 min</option>
+            <option value={15}>Every 15 min</option>
           </select>
         </label>
       </div>

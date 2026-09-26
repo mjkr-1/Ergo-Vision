@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 import app.config as config
 from ..pipeline import PosturePipeline
 from .schemas import (
+    BackgroundMonitoringResponse,
     CalibrationResponse,
     CameraDeviceResponse,
     CameraSelectRequest,
@@ -132,3 +133,33 @@ def get_config():
         target_fps=config.TARGET_FPS,
         demo_mode=config.DEMO_MODE,
     )
+
+
+@router.get("/api/background", response_model=BackgroundMonitoringResponse)
+def background_status():
+    pipe = _require_pipeline()
+    return BackgroundMonitoringResponse(
+        enabled=pipe.background_monitoring,
+        camera_active=pipe.camera.is_opened,
+    )
+
+
+@router.post("/api/background/start", response_model=BackgroundMonitoringResponse)
+def background_start():
+    return BackgroundMonitoringResponse(
+        **_require_pipeline().enable_background_monitoring()
+    )
+
+
+@router.post("/api/background/stop", response_model=BackgroundMonitoringResponse)
+def background_stop():
+    pipe = _require_pipeline()
+    result = pipe.disable_background_monitoring()
+
+    from .websocket import active_connections
+
+    if not active_connections:
+        pipe.deactivate_camera()
+        result["camera_active"] = False
+
+    return BackgroundMonitoringResponse(**result)

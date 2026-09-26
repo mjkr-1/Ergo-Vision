@@ -30,7 +30,6 @@ export default function Metrics({ posture, config }: Props) {
       <table className="metrics-table">
         <tbody>
           <tr><td>Slouch / Hunch</td><td>{SLOUCH_LABEL(measurement.slouch_indicator, config)}</td></tr>
-          <tr><td>Torso Lean</td><td>{measurement.torso_lean_degrees.toFixed(1)}°</td></tr>
           <tr><td>Head Tilt</td><td>{measurement.head_tilt_degrees.toFixed(1)}°</td></tr>
           <tr><td>Shoulder Angle</td><td>{measurement.shoulder_alignment_degrees.toFixed(1)}°</td></tr>
           <tr><td>Shoulder Alignment</td><td>{SHOULDER_LABEL(measurement.shoulder_alignment_score)}</td></tr>
@@ -41,10 +40,9 @@ export default function Metrics({ posture, config }: Props) {
       </table>
       <div className="confidence-strip">
         <span>Head {Math.round((posture?.tracking.head_confidence ?? 0) * 100)}%</span>
-        <span>Torso {Math.round((posture?.tracking.torso_confidence ?? 0) * 100)}%</span>
+        <span>Shoulders {Math.round((posture?.tracking.shoulder_confidence ?? 0) * 100)}%</span>
         <span>Eyes {Math.round((posture?.tracking.eye_confidence ?? 0) * 100)}%</span>
       </div>
-      {measurement.torso_length_ratio === 0 && <p className="metric-note">Keep your hips visible for stronger torso and hunch detection.</p>}
     </div>
   )
 }

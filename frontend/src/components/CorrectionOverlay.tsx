@@ -3,7 +3,7 @@ import type { PostureEvent } from '../types'
 
 interface Props { posture: PostureEvent | null }
 
-const SETTINGS_KEY = 'ergovision.reminders.v2'
+const SETTINGS_KEY = 'ergovision.reminders.v3'
 
 function desktopAlertsEnabled(): boolean {
   try {

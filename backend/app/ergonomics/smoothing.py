@@ -23,12 +23,15 @@ class SmoothingBuffer:
 
         smoothed = ErgonomicMeasurements(
             head_tilt_degrees=a * new.head_tilt_degrees + (1 - a) * prev.head_tilt_degrees,
+            head_tilt_signed_degrees=a * new.head_tilt_signed_degrees + (1 - a) * prev.head_tilt_signed_degrees,
             shoulder_alignment_score=a * new.shoulder_alignment_score + (1 - a) * prev.shoulder_alignment_score,
             shoulder_alignment_degrees=a * new.shoulder_alignment_degrees + (1 - a) * prev.shoulder_alignment_degrees,
+            shoulder_alignment_signed_degrees=a * new.shoulder_alignment_signed_degrees + (1 - a) * prev.shoulder_alignment_signed_degrees,
             neck_offset=a * new.neck_offset + (1 - a) * prev.neck_offset,
             forward_head_indicator=a * new.forward_head_indicator + (1 - a) * prev.forward_head_indicator,
             gaze_vertical_degrees=a * new.gaze_vertical_degrees + (1 - a) * prev.gaze_vertical_degrees,
             torso_lean_degrees=a * new.torso_lean_degrees + (1 - a) * prev.torso_lean_degrees,
+            torso_lean_signed_degrees=a * new.torso_lean_signed_degrees + (1 - a) * prev.torso_lean_signed_degrees,
             torso_length_ratio=a * new.torso_length_ratio + (1 - a) * prev.torso_length_ratio,
             head_shoulder_gap_ratio=a * new.head_shoulder_gap_ratio + (1 - a) * prev.head_shoulder_gap_ratio,
             torso_depth_ratio=a * new.torso_depth_ratio + (1 - a) * prev.torso_depth_ratio,
