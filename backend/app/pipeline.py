@@ -22,6 +22,7 @@ from .vision.detector import Detector
 from .vision.quality import assess_tracking
 
 logger = logging.getLogger(__name__)
+WINDOWS_TOAST_APP_ID = "ErgoVision.Desktop"
 
 
 class PosturePipeline:
@@ -277,6 +278,10 @@ class PosturePipeline:
 
     def _notify_native(self, title: str, body: str) -> None:
         self._last_reminder = f"{title}: {body}"
+        if platform.system() == "Windows":
+            self._notify_windows(title, body)
+            return
+
         if platform.system() != "Darwin":
             logger.info("%s — %s", title, body)
             return
@@ -293,6 +298,42 @@ class PosturePipeline:
             )
         except OSError:
             logger.exception("Could not show macOS notification")
+
+    @staticmethod
+    def _notify_windows(title: str, body: str) -> None:
+        """Show a Windows toast using the built-in PowerShell WinRT APIs."""
+        # XML-escape text before embedding it in the toast document.
+        from xml.sax.saxutils import escape as xml_escape
+
+        # Also escape single quotes for the surrounding PowerShell literal.
+        safe_title = xml_escape(title).replace("'", "''")
+        safe_body = xml_escape(body).replace("'", "''")
+        script = (
+            "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, "
+            "ContentType = WindowsRuntime] > $null; "
+            "[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, "
+            "ContentType = WindowsRuntime] > $null; "
+            "$xml = New-Object Windows.Data.Xml.Dom.XmlDocument; "
+            f"$xml.LoadXml('<toast><visual><binding template=\"ToastGeneric\">"
+            f"<text>{safe_title}</text><text>{safe_body}</text>"
+            "</binding></visual></toast>'); "
+            "$toast = [Windows.UI.Notifications.ToastNotification]::new($xml); "
+            f"$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{WINDOWS_TOAST_APP_ID}'); "
+            "$notifier.Show($toast)"
+        )
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                check=False,
+            )
+            if result.returncode:
+                logger.error("Windows notification failed (exit %s): %s", result.returncode, result.stderr.strip())
+        except (OSError, subprocess.TimeoutExpired):
+            logger.exception("Could not show Windows notification")
 
     def clear_calibration(self) -> dict:
         self.calibration.clear()

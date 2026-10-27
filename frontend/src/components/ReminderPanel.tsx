@@ -99,7 +99,7 @@ export default function ReminderPanel({ posture }: Props) {
       </div>
 
       <p className="reminder-copy">
-        Choose how long poor posture must persist before ErgoVision sends a native macOS notification.
+        Choose how long poor posture must persist before ErgoVision sends a desktop notification.
         If you stay in poor posture, it repeats after the same selected interval.
       </p>
 
