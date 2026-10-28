@@ -31,6 +31,7 @@ ErgoVision uses OpenCV and MediaPipe to estimate ergonomic posture indicators fr
 - Session timing, posture percentages, warning counts and average score
 - Live two-minute posture trend chart
 - Local browser session-history summaries
+- Local SQLite daily progress reports with posture trends and alert counts
 - Configurable movement-break and sustained-poor-posture reminders
 - Optional desktop notifications with explicit browser permission
 - Installable macOS `.app` launcher and Windows Desktop/Start Menu shortcuts
@@ -233,7 +234,7 @@ ErgoVision is deliberately local-first:
 - webcam frames are processed on the computer running the backend
 - raw footage is not persisted by the application
 - no external AI or inference API is used
-- live session data is held in memory; completed summary statistics may be retained in this browser
+- live session data is held in memory; anonymized posture and alert summaries are stored in a local SQLite database and recent-session cards may be retained in this browser
 - personal calibration measurements are stored locally under `~/.ergovision/`
 - the application does not require an account
 - network access is only needed for installation, model downloads and normal package management

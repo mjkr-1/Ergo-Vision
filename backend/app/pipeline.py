@@ -10,12 +10,13 @@ from typing import Optional
 import cv2
 
 from .config import WEBSOCKET_UPDATE_INTERVAL
-from .ergonomics.calibration import CalibrationProfile
+from .ergonomics.calibration import DATA_DIR, CalibrationProfile
 from .ergonomics.classifier import PostureClassifier
 from .ergonomics.feedback import FeedbackEngine
 from .ergonomics.measurements import ErgonomicMeasurements, compute_measurements
 from .ergonomics.scoring import compute_score
 from .ergonomics.smoothing import SmoothingBuffer
+from .session.history import SessionHistory
 from .session.tracker import SessionTracker
 from .vision.camera import Camera
 from .vision.detector import Detector
@@ -33,6 +34,13 @@ class PosturePipeline:
         self.feedback_engine = FeedbackEngine()
         self.smoother = SmoothingBuffer()
         self.tracker = SessionTracker()
+        try:
+            self.history: SessionHistory | None = SessionHistory(DATA_DIR / "session_history.sqlite3")
+        except Exception:
+            self.history = None
+            logger.exception("Local session history could not be initialized")
+        self._history_checkpoint_at = time.monotonic()
+        self._history_excluded_session_id: str | None = None
         self.calibration = CalibrationProfile.load()
         self._running = False
         self._thread: Optional[threading.Thread] = None
@@ -70,7 +78,34 @@ class PosturePipeline:
             self._thread.join(timeout=2.0)
             self._thread = None
         self.tracker.stop()
+        self.save_session_history()
         logger.info("Pipeline stopped")
+
+    def save_session_history(self) -> None:
+        record = self.tracker.report_record()
+        if record is None or self.history is None:
+            return
+        if record["session_id"] == self._history_excluded_session_id:
+            return
+        if record["monitored_seconds"] < 10:
+            return
+        try:
+            self.history.save_session(record)
+            self._history_checkpoint_at = time.monotonic()
+        except Exception:
+            logger.exception("Could not save local session history")
+
+    def clear_session_history(self) -> None:
+        if self.history is None:
+            raise RuntimeError("Local report storage is unavailable")
+        self.history.delete_all()
+        record = self.tracker.report_record()
+        self._history_excluded_session_id = record["session_id"] if record else None
+
+    def get_daily_reports(self, days: int) -> list[dict]:
+        if self.history is None:
+            raise RuntimeError("Local report storage is unavailable")
+        return self.history.daily_reports(days)
 
     def activate_camera(self) -> bool:
         # Open the webcam and resume posture processing for an active dashboard.
@@ -146,6 +181,8 @@ class PosturePipeline:
             self.tracker.update(tracker_status, score)
             self._maybe_remind(status, evaluated)
             self._maybe_emit(status, evaluated, score, tracking)
+            if time.monotonic() - self._history_checkpoint_at >= 30:
+                self.save_session_history()
 
     def _maybe_emit(self, status, measurements, score, tracking):
         now = time.time()
@@ -252,6 +289,7 @@ class PosturePipeline:
         now = time.monotonic()
 
         if now >= self._next_break_at:
+            self.tracker.record_alert("movement")
             self._notify_native(
                 "ErgoVision · Movement break",
                 "Stand up, move around, and reset your posture for a minute or two.",
@@ -272,6 +310,7 @@ class PosturePipeline:
 
         feedback = self.feedback_engine.generate(measurements, status)
         body = feedback[0] if feedback else "Return to your calibrated upright posture."
+        self.tracker.record_alert("posture")
         self._notify_native("ErgoVision · Posture check", body)
         # Repeat only if poor posture persists for another selected interval.
         self._poor_since = now

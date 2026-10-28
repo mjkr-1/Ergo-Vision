@@ -132,3 +132,20 @@ class ReminderSettingsResponse(BaseModel):
     movement_break_minutes: int
     background_monitoring: bool
     last_reminder: str
+
+
+class DailyReport(BaseModel):
+    date: str
+    has_data: bool
+    session_count: int
+    monitored_seconds: float
+    good_seconds: float
+    warning_seconds: float
+    bad_seconds: float
+    away_seconds: float
+    good_percentage: float | None
+    average_score: float | None
+    warning_count: int
+    bad_count: int
+    posture_alert_count: int
+    movement_alert_count: int

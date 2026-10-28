@@ -6,9 +6,9 @@ ErgoVision is designed around a simple rule: webcam analysis should remain local
 
 During a running session, the backend reads webcam frames, detects face and pose landmarks, computes ergonomic measurements and stores the latest derived state in memory.
 
-## What is not persisted
+## What is persisted
 
-ErgoVision does not intentionally write raw webcam frames, annotated video or session history to disk. Session statistics are in-memory and disappear when the backend exits.
+Raw webcam frames, annotated video and per-frame landmarks are not written to disk. Anonymized session aggregates (monitoring duration, posture-state durations, average score and alert counts) are stored in `session_history.sqlite3` in the local ErgoVision data directory so daily reports survive restarts. The dashboard can clear these reports.
 
 ## Network access
 

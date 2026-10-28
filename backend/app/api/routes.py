@@ -1,7 +1,7 @@
 import time
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 import app.config as config
 from ..pipeline import PosturePipeline
@@ -11,6 +11,7 @@ from .schemas import (
     CameraSelectRequest,
     CameraStatusResponse,
     ConfigResponse,
+    DailyReport,
     HealthResponse,
     PostureCurrent,
     ReminderSettingsRequest,
@@ -70,15 +71,34 @@ def session_start():
 def session_stop():
     pipe = _require_pipeline()
     pipe.tracker.stop()
+    pipe.save_session_history()
     return SessionStatsResponse(**pipe.get_session_stats())
 
 
 @router.post("/api/session/reset", response_model=SessionStatsResponse)
 def session_reset():
     pipe = _require_pipeline()
+    pipe.save_session_history()
     pipe.tracker.reset()
     pipe.tracker.start()
     return SessionStatsResponse(**pipe.get_session_stats())
+
+
+@router.get("/api/reports/daily", response_model=list[DailyReport])
+def daily_reports(days: int = Query(default=14, ge=1, le=90)):
+    try:
+        return [DailyReport(**item) for item in _require_pipeline().get_daily_reports(days)]
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.delete("/api/reports/history")
+def clear_report_history():
+    try:
+        _require_pipeline().clear_session_history()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"cleared": True}
 
 
 @router.get("/api/calibration", response_model=CalibrationResponse)
