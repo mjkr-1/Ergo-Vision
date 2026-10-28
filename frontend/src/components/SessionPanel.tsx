@@ -105,7 +105,7 @@ export default function SessionPanel() {
           Finish & Reset
         </button>
       </div>
-      <p className="session-note">Finish & Reset archives the completed session locally in this browser.</p>
+      <p className="session-note">Recent sessions stay in this browser; daily report summaries are stored locally in SQLite.</p>
       {error && <p className="inline-error">{error}</p>}
     </div>
   )

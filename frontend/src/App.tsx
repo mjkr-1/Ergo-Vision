@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import CalibrationPanel from './components/CalibrationPanel'
 import CameraFeed from './components/CameraFeed'
+import DailyReports from './components/DailyReports'
 import Feedback from './components/Feedback'
 import Metrics from './components/Metrics'
 import PostureScore from './components/PostureScore'
@@ -91,9 +92,10 @@ export default function App() {
           <SessionPanel />
           <ReminderPanel posture={posture} />
           <SessionHistory />
+          <DailyReports />
           <div className="card privacy-card">
             <div className="card-title">Privacy</div>
-            <p>Video processing stays on this computer. Camera frames are not stored or uploaded. Calibration is stored locally on this Mac; session history stays in this browser.</p>
+            <p>Video processing stays on this computer. Camera frames are not stored or uploaded. Calibration and anonymized session summaries stay in local files on this computer.</p>
           </div>
         </aside>
       </main>

@@ -54,6 +54,18 @@ Clears session statistics and starts a fresh session.
 
 The browser dashboard archives completed session summaries in local browser storage before reset. No images are stored.
 
+## Daily reports
+
+### `GET /api/reports/daily?days=14`
+
+Returns one local-calendar-day summary per requested day (1–90 days), including days with no recorded session. Each report includes continuous monitored time, time and share by posture state, average posture score, warning/bad transitions, and posture/movement reminder counts. `has_data` distinguishes an empty day from a recorded day; percentages and scores are `null` when no data exists.
+
+Session aggregates are stored in the local ErgoVision data directory as `session_history.sqlite3` (or under `ERGOVISION_DATA_DIR` when configured). A session is attributed to the local calendar date on which monitoring began, so an overnight session is reported under its start date. The database contains aggregate metadata only; no images or per-frame landmarks are stored.
+
+### `DELETE /api/reports/history`
+
+Deletes stored report rows. The current session is excluded from future checkpoints; a new session can be recorded normally.
+
 ## Configuration
 
 ### `GET /api/config`

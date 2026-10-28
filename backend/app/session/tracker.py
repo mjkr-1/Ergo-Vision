@@ -1,6 +1,8 @@
 import threading
 import time
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 
 @dataclass
@@ -38,6 +40,9 @@ class SessionTracker:
         self._last_frame_time: float | None = None
         self._current_poor_started: float | None = None
         self._longest_poor = 0.0
+        self._session_id: str | None = None
+        self._posture_alert_count = 0
+        self._movement_alert_count = 0
         self.active = False
 
     def start(self):
@@ -47,6 +52,7 @@ class SessionTracker:
             now = time.time()
             if self._start_time is None:
                 self._start_time = now
+                self._session_id = str(uuid.uuid4())
             self.active = True
             self._last_frame_time = now
             if self._last_status in ("WARNING", "BAD"):
@@ -77,7 +83,39 @@ class SessionTracker:
             self._last_frame_time = None
             self._current_poor_started = None
             self._longest_poor = 0.0
+            self._session_id = None
+            self._posture_alert_count = 0
+            self._movement_alert_count = 0
             self.active = False
+
+    def record_alert(self, kind: str) -> None:
+        with self._lock:
+            if kind == "posture":
+                self._posture_alert_count += 1
+            elif kind == "movement":
+                self._movement_alert_count += 1
+
+    def report_record(self) -> dict | None:
+        with self._lock:
+            if self._session_id is None or self._start_time is None:
+                return None
+            stats = self.get_stats()
+            ended = time.time()
+            return {
+                "session_id": self._session_id,
+                "started_at": datetime.fromtimestamp(self._start_time, timezone.utc).isoformat(),
+                "ended_at": datetime.fromtimestamp(ended, timezone.utc).isoformat(),
+                "monitored_seconds": stats.session_duration_seconds,
+                "good_seconds": stats.good_duration_seconds,
+                "warning_seconds": stats.warning_duration_seconds,
+                "bad_seconds": stats.bad_duration_seconds,
+                "away_seconds": stats.no_person_duration_seconds,
+                "average_score": stats.average_score,
+                "warning_count": stats.warning_count,
+                "bad_count": stats.bad_count,
+                "posture_alert_count": self._posture_alert_count,
+                "movement_alert_count": self._movement_alert_count,
+            }
 
     def update(self, status: str, score: int):
         with self._lock:
