@@ -48,7 +48,7 @@ jobs:
           chmod +x release/ErgoVision/install-mac.command
           ditto -c -k --keepParent release/ErgoVision ErgoVision-macOS.zip
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-release
           path: ErgoVision-macOS.zip
@@ -108,7 +108,7 @@ jobs:
           Remove-Item "$Dest\frontend\node_modules" -Recurse -Force -ErrorAction SilentlyContinue
           Compress-Archive -Path "$Dest\*" -DestinationPath "ErgoVision-Windows.zip" -Force
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-release
           path: ErgoVision-Windows.zip
