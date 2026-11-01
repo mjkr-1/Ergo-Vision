@@ -8,7 +8,7 @@ mediapipe==1.0.1; sys_platform != "darwin" or platform_machine != "x86_64"
 opencv-contrib-python==5.0.0.93; sys_platform != "darwin" or platform_machine != "x86_64"
 numpy>=2,<3; sys_platform != "darwin" or platform_machine != "x86_64"
 
-fastapi>=0.110,<1.0
+fastapi>=0.162.0,<1.0
 uvicorn>=0.54.0,<1.0
 websockets>=12,<18
 pydantic>=2.13.5,<3.0
